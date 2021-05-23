@@ -1,5 +1,7 @@
 package httpserver
 
+// supports the /scrape and /scrapeall URL endpoints
+
 import (
 	"encoding/json"
 	"net/http"
