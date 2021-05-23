@@ -1,14 +1,13 @@
-package main
+package recipeclient
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 
 	"golang.org/x/net/html"
 )
 
-type SchmaRecipe struct {
+type SchemaRecipe struct {
 	Context         string `json:"@context,omitempty"`
 	Type            string `json:"@type,omitempty"`
 	AggregateRating struct {
@@ -52,24 +51,28 @@ type SchmaRecipe struct {
 	TotalTime   string `json:"totalTime,omitempty"`
 }
 
-func main() {
-	resp, err := http.Get("https://www.bettycrocker.com/recipes/lemon-raspberry-bars/5aaa9c08-53f9-404f-89e0-47ef9e49e605")
+func (x *RecipeClient) GetRecipies(siteUrl string) (list []SchemaRecipe, err error) {
+	list = make([]SchemaRecipe, 0)
+	req, err := http.NewRequest(http.MethodGet, siteUrl, nil)
 	if err != nil {
-		fmt.Println(err)
+		return
+	}
+	resp, err := x.client.Do(req)
+	if err != nil {
 		return
 	}
 	doc, err := html.Parse(resp.Body)
-	node(doc)
+	node(doc, &list)
+
+	return
 }
 
-func node(n *html.Node) {
-	recipe := &SchmaRecipe{}
-	err := json.Unmarshal([]byte(n.Data), recipe)
-	if err == nil {
-		b, _ := json.MarshalIndent(recipe, "", "    ")
-		fmt.Println(string(b))
+func node(n *html.Node, list *[]SchemaRecipe) {
+	recipe := &SchemaRecipe{}
+	if err := json.Unmarshal([]byte(n.Data), recipe); err == nil {
+		(*list) = append(*list, *recipe)
 	}
 	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		node(c)
+		node(c, list)
 	}
 }
