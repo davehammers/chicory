@@ -25,9 +25,18 @@ func (x *Config) ConfigRecipeClient() *Config {
 }
 
 func (x *Config) ConfigServer() *Config {
+	x.Server = httpserver.New().
+		SetAddress("0.0.0.0").
+		SetPort(8080).
+		SetClient(x.RecipeClient).
+		NewServer()
+
+	x.Server.AddRoutes()
 	return x
 }
 
 func (x *Config) Start() *Config {
+	// this is a blocking function call. It will only return if there is a server error
+	x.Server.Handler()
 	return x
 }
