@@ -12,10 +12,13 @@ import (
 type RClient interface {
 	Do(req *http.Request) (*http.Response, error)
 }
+
+// Client - control data structure for client I/O
 type Client struct {
 	client RClient
 }
 
+// NewHttpClient - allocate a new client data structure
 func NewHttpClient() *Client {
 	return &Client{
 		client: &http.Client{Timeout: 20 * time.Second},

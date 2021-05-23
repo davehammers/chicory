@@ -1,5 +1,7 @@
 package recipeclient
 
+// contains definitions and functions for accessing and parsing recipies from URLs
+
 import (
 	"encoding/json"
 	"net/http"
@@ -8,8 +10,8 @@ import (
 )
 
 type SchemaRecipe struct {
-	Context         string `json:"@context,omitempty"`
-	Type            string `json:"@type,omitempty"`
+	Context         string `json:"@context"`
+	Type            string `json:"@type"`
 	AggregateRating struct {
 		Type        string `json:"@type,omitempty"`
 		BestRating  string `json:"bestRating,omitempty"`
@@ -51,22 +53,29 @@ type SchemaRecipe struct {
 	TotalTime   string `json:"totalTime,omitempty"`
 }
 
+// GetRecipies - extract any recipies from the URL site provided. returns []SchemaRecipe
 func (x *RecipeClient) GetRecipies(siteUrl string) (list []SchemaRecipe, err error) {
 	list = make([]SchemaRecipe, 0)
+	// format a GET request
 	req, err := http.NewRequest(http.MethodGet, siteUrl, nil)
 	if err != nil {
 		return
 	}
+
+	// invoke the client transaction handler
 	resp, err := x.client.Do(req)
 	if err != nil {
 		return
 	}
+
+	// parse the HTML body looking for recipies
 	doc, err := html.Parse(resp.Body)
 	node(doc, &list)
 
 	return
 }
 
+// node - local function to walk through the HTML nodes looking for recipies
 func node(n *html.Node, list *[]SchemaRecipe) {
 	recipe := &SchemaRecipe{}
 	if err := json.Unmarshal([]byte(n.Data), recipe); err == nil {

@@ -12,6 +12,7 @@ import (
 
 type mockClient struct{}
 
+// TestMockGetRecipies - read the HTML from a local file for unit testing
 func TestMockGetRecipies(t *testing.T) {
 
 	x := New().
@@ -28,6 +29,7 @@ func TestMockGetRecipies(t *testing.T) {
 
 }
 
+// TestHttpGetRecipies - GET from a URL for integration testing
 func TestHttpGetRecipies(t *testing.T) {
 	x := New().
 		SetClient(&http.Client{Timeout: 20 * time.Second}).
@@ -43,6 +45,7 @@ func TestHttpGetRecipies(t *testing.T) {
 
 }
 
+// Do - Mock HTTP interface that reads HTML from a local file
 func (x *mockClient) Do(req *http.Request) (resp *http.Response, err error) {
 	data, err := os.Open("testdata/site1.html")
 	resp = &http.Response{
