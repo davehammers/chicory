@@ -145,3 +145,37 @@ E.g. http://0.0.0.0:8080/scrapeall?url=https://www.bettycrocker.com/recipes/slow
 
 If multiple recipe blocks are present in the provided URL, all are extracted and displayed
 
+## Docker Image
+
+The docker commands for building a docker image are in build/package/Dockerfile.
+
+Because Golang is a compiled language, the build can create a SCRATCH image which only contains the `rscan` binary. A SCRATCH image keeps the memory usage to the needs of the application plus a small overhead for the container runtime itself.
+
+### Building the Docker Image
+
+To build the docker image, from the top level directory enter the shell command:
+
+```sh
+make docker
+```
+
+The docker  image is stored in
+
+```sh
+bin/rscan.docker
+```
+
+### Running the Docker Image
+
+*To run the docker image in a container, it is assumed that docker is installed on your local machine.*
+
+From a shell enter:
+
+```sh
+docker load < bin/rscan.docker
+
+docker run -p 8080:8080 rscan.docker
+```
+
+`rscan` is now listening on port 8080 running inside the container and will respond to the example URLs above.
+
