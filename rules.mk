@@ -6,8 +6,8 @@ COVER_DIRS := $(subst Makefile,cover,$(SUBDIRS))
 DOC_DIRS := $(subst Makefile,doc,$(SUBDIRS))
 STATICCHECK = $(HOME)/go/bin/staticcheck
 GO_FILES = $(wildcard *.go)
-DOCKER_APP = docker_$(APP)
-DOCKER_IMAGE = $(APP).docker
+DOCKER_APP = $(notdir $(wildcard ./cmd/*))
+DOCKER_IMAGE = $(DOCKER_APP).docker
 GOBIN := $(shell while true; do if [[ `pwd` == "/" ]]; then exit 1;fi;if [[ -f `pwd`/go.mod ]]; then echo `pwd`/bin;exit 0;fi;cd ..;done)
 export GOBIN
 
@@ -108,16 +108,10 @@ endif
 
 .PHONY: docker
 docker: $(DOCKER_IMAGE)
-$(DOCKER_IMAGE):
-	$$(cd ecs;go mod vendor)
-	docker build .
-	$$(cd ecs;rm -rf vendor)
-
-.PHONY: docker_minion
-docker_minion:
+$(DOCKER_IMAGE): 
 	go mod vendor
-	docker build --file ./Dockerfile ../../..
-	rm -rf ../../vendor
+	docker build -f build/package/Dockerfile -t $@ .
+	mkdir -p bin
+	docker image save -o bin/$@ $@
+	rm -rf vendor
 
-$(DOCKER_APP): all
-	CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build -a -o $@ .

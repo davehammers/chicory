@@ -4,6 +4,7 @@
 package config
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -31,13 +32,14 @@ func (x *Config) ConfigRecipeClient() *Config {
 
 // ConfigServer - configure and initialize an instance of the httpserver  package
 func (x *Config) ConfigServer() *Config {
-	x.Server = httpserver.New().
+	serverIn := httpserver.New().
 		SetAddress("0.0.0.0").
 		SetPort(8080).
-		SetClient(x.RecipeClient).
-		NewServer()
+		SetClient(x.RecipeClient)
+	x.Server = serverIn.NewServer()
 
 	x.Server.AddRoutes()
+	fmt.Printf("Server configured for %s:%d\n", serverIn.Address, serverIn.Port)
 	return x
 }
 
@@ -45,6 +47,7 @@ func (x *Config) ConfigServer() *Config {
 // is not expected to return unless the application has failed.
 func (x *Config) Start() *Config {
 	// this is a blocking function call. It will only return if there is a server error
+	fmt.Println("Starting application")
 	x.Server.Handler()
 	return x
 }
