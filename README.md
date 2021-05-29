@@ -147,6 +147,8 @@ If multiple recipe blocks are present in the provided URL, all are extracted and
 
 ## Docker Image
 
+*docker must be installed on your local machine for the following sections to work.*
+
 The docker commands for building a docker image are in build/package/Dockerfile.
 
 Because Golang is a compiled language, the build can create a SCRATCH image which only contains the `rscan` binary. A SCRATCH image keeps the memory usage to the needs of the application plus a small overhead for the container runtime itself.
@@ -166,8 +168,6 @@ bin/rscan.docker
 ```
 
 ### Running the Docker Image
-
-*To run the docker image in a container, it is assumed that docker is installed on your local machine.*
 
 From a shell enter:
 
