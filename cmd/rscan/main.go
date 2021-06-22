@@ -8,6 +8,7 @@ import (
 
 func main() {
 	config.New().
+		ConfigRedis().
 		ConfigRecipeClient().
 		ConfigServer().
 		Start()

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-redis/redis/v8"
 	"rscan/internal/httpserver"
 	"rscan/internal/recipeclient"
 )
@@ -14,6 +15,7 @@ import (
 type Config struct {
 	RecipeClient *recipeclient.RecipeClient
 	Server       *httpserver.Server
+	Redis        *redis.Client
 }
 
 // New - returns an empty *Config
@@ -21,10 +23,21 @@ func New() *Config {
 	return &Config{}
 }
 
+func (x *Config) ConfigRedis() *Config {
+	x.Redis = redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "", // no password set
+		DB:       0,  // use default DB
+	})
+
+	return x
+}
+
 // ConfigRecipeClient - configure and initialize an instance of the recipeclient package
 func (x *Config) ConfigRecipeClient() *Config {
 	x.RecipeClient = recipeclient.New().
 		SetClient(&http.Client{Timeout: 20 * time.Second}).
+		SetRedis(x.Redis).
 		NewClient()
 	return x
 }

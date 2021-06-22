@@ -4,6 +4,8 @@ package recipeclient
 
 import (
 	"encoding/json"
+	"github.com/go-redis/redis/v8"
+	"log"
 	"net/http"
 
 	"golang.org/x/net/html"
@@ -56,6 +58,21 @@ type SchemaRecipe struct {
 // GetRecipies - extract any recipies from the URL site provided. returns []SchemaRecipe
 func (x *RecipeClient) GetRecipies(siteUrl string) (list []SchemaRecipe, err error) {
 	list = make([]SchemaRecipe, 0)
+	val, err := x.redis.Get(x.ctx, siteUrl).Result()
+	switch {
+	case err == redis.Nil:
+	case err != nil:
+	default:
+		log.Println("Found cache match", siteUrl)
+		rcp := &SchemaRecipe{}
+		err = json.Unmarshal([]byte(val), rcp)
+		if err != nil {
+			log.Println("Could not unmarshal Redis object", err)
+			break
+		}
+		list = append(list, *rcp)
+		return
+	}
 	// format a GET request
 	req, err := http.NewRequest(http.MethodGet, siteUrl, nil)
 	if err != nil {
@@ -71,6 +88,18 @@ func (x *RecipeClient) GetRecipies(siteUrl string) (list []SchemaRecipe, err err
 	// parse the HTML body looking for recipies
 	doc, err := html.Parse(resp.Body)
 	node(doc, &list)
+
+	if len(list) >= 0 {
+		for _, row := range list {
+			b, err := json.Marshal(row)
+			if err != nil {
+				log.Println("Could not marshal SchemaRecipe", err)
+				break
+			}
+			x.redis.Set(x.ctx, siteUrl, string(b), 0).Err()
+			break
+		}
+	}
 
 	return
 }
