@@ -16,7 +16,7 @@ type IngredientResponse struct {
 	Ingredients []string `json:"ingredients"`
 }
 
-// scrape - dump the ingredients for a single recipe to the browser
+// scrape - dump all of the found recipe details to the browser
 func (x *Server) scrape(c *fiber.Ctx) (err error) {
 	siteURL := c.Query("url")
 	fmt.Println(siteURL)
@@ -31,38 +31,31 @@ func (x *Server) scrape(c *fiber.Ctx) (err error) {
 		c.SendString(err.Error())
 		return c.SendStatus(http.StatusBadRequest)
 	}
-	resp := IngredientResponse{
-		Ingredients: recipe.RecipeIngredient,
-	}
-	b, err := JSONMarshal(resp)
-	if err != nil {
-		c.SendString(err.Error())
-		return c.SendStatus(http.StatusNotFound)
-	}
-	return c.SendString(string(b))
-}
-
-// scrapeAll - dump all of the found recipe details to the browser
-func (x *Server) scrapeAll(c *fiber.Ctx) (err error) {
-	siteURL := c.Query("url")
-	fmt.Println(siteURL)
-
-	recipe, err := x.client.GetRecipe(siteURL)
-	switch err.(type) {
+	switch r := recipe.(type) {
 	case nil:
-	case recipeclient.NotFoundError:
-		c.SendString(err.Error())
+		c.SendString("NotFound\n")
 		return c.SendStatus(http.StatusNotFound)
+	case recipeclient.RecipeSchema1:
+		b, err := JSONMarshal(r)
+		if err == nil {
+			return c.SendString(string(b))
+		}
+	case recipeclient.RecipeSchema2:
+		for _, entry := range r.Graph {
+			if len(entry.RecipeIngredient) > 0 {
+				b, err := JSONMarshal(entry)
+				if err == nil {
+					return c.SendString(string(b))
+				}
+			}
+		}
 	default:
-		c.SendString(err.Error())
-		return c.SendStatus(http.StatusBadRequest)
+		b, err := JSONMarshal(r)
+		if err == nil {
+			return c.SendString(string(b))
+		}
 	}
-	b, err := JSONMarshal(recipe)
-	if err != nil {
-		c.SendString(err.Error())
-		return c.SendStatus(http.StatusNotFound)
-	}
-	return c.SendString(string(b))
+	return c.SendStatus(http.StatusNotFound)
 }
 
 func JSONMarshal(t interface{}) ([]byte, error) {
