@@ -2,34 +2,32 @@
 
 package recipeclient
 
-// RecipeClientIn - input parameters for a RecipeClient
-type RecipeClientIn struct {
-	Client RClient
-}
+import (
+	"github.com/dgraph-io/ristretto"
+	log "github.com/sirupsen/logrus"
+	"github.com/valyala/fasthttp"
+)
 
-// RecipeClient - internal structure to this package. Typically no fields are exported.
 type RecipeClient struct {
-	client RClient
-}
-
-// RecipeClientIn - allocate a new RecipeClientIn. Returns *RecipeClientIn
-func New() *RecipeClientIn {
-	return &RecipeClientIn{}
-}
-
-// SetClient - used to set the HTTP client for this package
-// usage:
-//	client := recipeclient.New().
-//		SetClient(myClient).
-//		NewClient()
-func (x *RecipeClientIn) SetClient(in RClient) *RecipeClientIn {
-	x.Client = in
-	return x
+	client *fasthttp.Client
+	cache  *ristretto.Cache
 }
 
 // NewClient - allocate a *RecipeClient
-func (x *RecipeClientIn) NewClient() *RecipeClient {
-	return &RecipeClient{
-		client: x.Client,
+func New() *RecipeClient {
+	var err error
+
+	c := RecipeClient{}
+	c.client = &fasthttp.Client{
+		Name: "chicory-scraper",
 	}
+	cacheCfg := ristretto.Config{
+		NumCounters: 1e7,     // number of keys to track frequency of (10M).
+		MaxCost:     1 << 30, // maximum cost of cache (1GB).
+		BufferItems: 64,      // number of keys per Get buffer.
+	}
+	if c.cache, err = ristretto.NewCache(&cacheCfg); err != nil {
+		log.Fatal(err)
+	}
+	return &c
 }

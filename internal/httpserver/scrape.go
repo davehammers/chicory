@@ -3,56 +3,73 @@ package httpserver
 // supports the /scrape and /scrapeall URL endpoints
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"scraper/internal/recipeclient"
 
-	"github.com/gorilla/mux"
+	"github.com/gofiber/fiber/v2"
 )
 
-type SingleResponse struct {
+type IngredientResponse struct {
 	Ingredients []string `json:"ingredients"`
 }
 
 // scrape - dump the ingredients for a single recipe to the browser
-func (x *Server) scrape(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	siteURL := vars["url"]
+func (x *Server) scrape(c *fiber.Ctx) (err error) {
+	siteURL := c.Query("url")
+	fmt.Println(siteURL)
 
-	list, err := x.client.GetRecipies(siteURL)
+	recipe, err := x.client.GetRecipies(siteURL)
+	switch err.(type) {
+	case nil:
+	case recipeclient.NotFoundError:
+		c.SendString(err.Error())
+		return c.SendStatus(http.StatusNotFound)
+	default:
+		c.SendString(err.Error())
+		return c.SendStatus(http.StatusBadRequest)
+	}
+	resp := IngredientResponse{
+		Ingredients: recipe.RecipeIngredient,
+	}
+	b, err := JSONMarshal(resp)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		c.SendString(err.Error())
+		return c.SendStatus(http.StatusNotFound)
 	}
-	if len(list) == 0 {
-		http.Error(w, "No recipies found", http.StatusNotFound)
-		return
-	}
-	for _, l := range list {
-		resp := SingleResponse{
-			Ingredients: l.RecipeIngredient,
-		}
-		enc := json.NewEncoder(w)
-		enc.SetIndent("", "    ")
-		enc.Encode(resp)
-		break
-	}
+	return c.SendString(string(b))
 }
 
 // scrapeAll - dump all of the found recipe details to the browser
-func (x *Server) scrapeAll(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	siteURL := vars["url"]
+func (x *Server) scrapeAll(c *fiber.Ctx) (err error) {
+	siteURL := c.Query("url")
+	fmt.Println(siteURL)
 
-	list, err := x.client.GetRecipies(siteURL)
+	recipe, err := x.client.GetRecipies(siteURL)
+	switch err.(type) {
+	case nil:
+	case recipeclient.NotFoundError:
+		c.SendString(err.Error())
+		return c.SendStatus(http.StatusNotFound)
+	default:
+		c.SendString(err.Error())
+		return c.SendStatus(http.StatusBadRequest)
+	}
+	b, err := JSONMarshal(recipe)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+		c.SendString(err.Error())
+		return c.SendStatus(http.StatusNotFound)
 	}
-	if len(list) == 0 {
-		http.Error(w, "No recipies found", http.StatusNotFound)
-		return
-	}
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "    ")
-	enc.Encode(list)
+	return c.SendString(string(b))
+}
+
+func JSONMarshal(t interface{}) ([]byte, error) {
+	buffer := &bytes.Buffer{}
+	encoder := json.NewEncoder(buffer)
+	encoder.SetEscapeHTML(false)
+	encoder.SetIndent("", "    ")
+	err := encoder.Encode(t)
+	return buffer.Bytes(), err
 }

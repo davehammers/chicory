@@ -7,7 +7,7 @@ WORKDIR /chicory
 COPY . .
 
 # Build the binary.
-RUN CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build -a -ldflags="-s -w" -o bin/rscan cmd/rscan/main.go
+RUN CGO_ENABLED=0 GOARCH=amd64 GOOS=linux go build -a -ldflags="-s -w" -o bin/scraper cmd/scraper/main.go
 
 ############################
 # STEP 2 build a small image
@@ -20,10 +20,10 @@ COPY --from=builder /etc/ssl/certs/ca-certificates.crt .
 
 # copy the executable from the builder
 WORKDIR /
-COPY --from=builder /chicory/bin/rscan .
+COPY --from=builder /chicory/bin/scraper .
 
 # export port for HTTP endpoints
 EXPOSE 8080
 
 # Run the binary.
-ENTRYPOINT ["./rscan"]
+ENTRYPOINT ["./scraper"]

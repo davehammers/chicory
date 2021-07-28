@@ -1,4 +1,4 @@
-# Chicory - recipe scanner (rscan)
+# Chicory - recipe scanner (scraper)
 
 This is a simple application that scans URLs for recipes and displays the ingredients in JSON format.
 
@@ -12,7 +12,7 @@ The application follows the Golang standard project layout, described here https
 .
 ├── bin
 ├── cmd
-│   └── rscan
+│   └── scraper
 └── internal
     ├── config
     ├── httpserver
@@ -20,7 +20,7 @@ The application follows the Golang standard project layout, described here https
         └── testdata
 ```
 
-## Building rscan
+## Building scraper
 
 At the top level directory enter:
 
@@ -31,14 +31,14 @@ make install
 The application will compile, run unit tests and install the binary in:
 
 ```sh
-bin/rscan
+bin/scraper
 ```
 
-## Running rscan
+## Running scraper
 
 Rscan creates an HTTP web server on port 8080. To start the application: from a shell, enter
 
-`bin/rscan`
+`bin/scraper`
 
 Scan supports 2 endpoint URLs:
 
@@ -151,7 +151,7 @@ If multiple recipe blocks are present in the provided URL, all are extracted and
 
 The docker commands for building a docker image are in build/package/Dockerfile.
 
-Because Golang is a compiled language, the build can create a SCRATCH image which only contains the `rscan` binary. A SCRATCH image keeps the memory usage to the needs of the application plus a small overhead for the container runtime itself.
+Because Golang is a compiled language, the build can create a SCRATCH image which only contains the `scraper` binary. A SCRATCH image keeps the memory usage to the needs of the application plus a small overhead for the container runtime itself.
 
 ### Building the Docker Image
 
@@ -164,7 +164,7 @@ make docker
 The docker  image is stored in
 
 ```sh
-bin/rscan.docker
+bin/scraper.docker
 ```
 
 ### Running the Docker Image
@@ -172,10 +172,10 @@ bin/rscan.docker
 From a shell enter:
 
 ```sh
-docker load < bin/rscan.docker
+docker load < bin/scraper.docker
 
-docker run -p 8080:8080 rscan.docker
+docker run -p 8080:8080 scraper.docker
 ```
 
-`rscan` is now listening on port 8080 running inside the container and will respond to the example URLs above.
+`scraper` is now listening on port 8080 running inside the container and will respond to the example URLs above.
 

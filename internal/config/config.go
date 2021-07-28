@@ -4,17 +4,18 @@
 package config
 
 import (
+	"flag"
 	"fmt"
-	"net/http"
-	"time"
-
-	"rscan/internal/httpserver"
-	"rscan/internal/recipeclient"
+	"scraper/internal/httpserver"
+	"scraper/internal/recipeclient"
+	"scraper/internal/util"
 )
 
 type Config struct {
-	RecipeClient *recipeclient.RecipeClient
-	Server       *httpserver.Server
+	RecipeClient  *recipeclient.RecipeClient
+	Server        *httpserver.Server
+	serverAddress string
+	serverPort    int
 }
 
 // New - returns an empty *Config
@@ -22,19 +23,31 @@ func New() *Config {
 	return &Config{}
 }
 
+func (x *Config) Main() {
+	x.ConfigRecipeClient().
+		CommandLineOptions().
+		ConfigServer().
+		Start()
+}
+
+func (x *Config) CommandLineOptions() *Config {
+	flag.StringVar(&x.serverAddress, "a", "0.0.0.0", "Server IP address")
+	flag.IntVar(&x.serverPort, "p", 9000, "Server port number")
+	flag.Parse()
+	return x
+}
+
 // ConfigRecipeClient - configure and initialize an instance of the recipeclient package
 func (x *Config) ConfigRecipeClient() *Config {
-	x.RecipeClient = recipeclient.New().
-		SetClient(&http.Client{Timeout: 20 * time.Second}).
-		NewClient()
+	x.RecipeClient = recipeclient.New()
 	return x
 }
 
 // ConfigServer - configure and initialize an instance of the httpserver  package
 func (x *Config) ConfigServer() *Config {
 	serverIn := httpserver.New().
-		SetAddress("0.0.0.0").
-		SetPort(8080).
+		SetAddress(util.LookupEnv("SERVER_ADDRESS", x.serverAddress)).
+		SetPort(util.LookupEnvInt("SERVER_PORT", x.serverPort)).
 		SetClient(x.RecipeClient)
 	x.Server = serverIn.NewServer()
 

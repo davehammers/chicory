@@ -5,14 +5,12 @@ package httpserver
 // These functions initialize the package for each server instance
 
 import (
+	"context"
 	"fmt"
-	"net/http"
 
-	"rscan/internal/recipeclient"
+	"scraper/internal/recipeclient"
 
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
-
+	"github.com/gofiber/fiber/v2"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -30,7 +28,8 @@ type HttpServerIn struct {
 // Server - internal data structures for the HTTP server
 type Server struct {
 	// router. See github.com/gorilla/mux documentation for full details
-	router  *mux.Router
+	ctx     context.Context
+	server  *fiber.App
 	address string
 	port    int
 	client  *recipeclient.RecipeClient
@@ -61,10 +60,19 @@ func (x *HttpServerIn) SetClient(in *recipeclient.RecipeClient) *HttpServerIn {
 
 // NewServer - creats a new server data structure instance from the HttpServerIn parameters
 func (x *HttpServerIn) NewServer() (out *Server) {
+	cfg := fiber.Config{
+		BodyLimit:       8 * 1024,
+		WriteBufferSize: 8 * 1024,
+		GETOnly:         true,
+		AppName:         "scrapper",
+	}
 	out = &Server{
-		router: mux.NewRouter(),
+		server: fiber.New(cfg),
 		client: x.Client,
 	}
+	// out.server.Use(cors.ConfigDefault)
+	out.AddRoutes()
+
 	if x.Port == 0 {
 		out.port = defaultHttpPort
 	} else {
@@ -88,24 +96,7 @@ Use
 to run this as a background server
 */
 func (x *Server) Handler() {
-	headersOk := handlers.AllowedHeaders([]string{
-		"*",
-		"Authorization",
-		"X-Requested-With",
-		"Content-Type",
-	})
-	originsOk := handlers.AllowedOrigins([]string{"*"})
-	methodsOk := handlers.AllowedMethods([]string{
-		"GET",
-		"HEAD",
-		"PATCH",
-		"POST",
-		"PUT",
-		"DELETE",
-		"OPTIONS"})
-
-	err := http.ListenAndServe(fmt.Sprintf("%s:%d", x.address, x.port),
-		handlers.CORS(headersOk, originsOk, methodsOk)(x.router))
+	err := x.server.Listen(fmt.Sprintf("%s:%d", x.address, x.port))
 	// This function is blocking. log if this returns
 	log.Fatal(err)
 }
