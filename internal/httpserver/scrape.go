@@ -21,7 +21,7 @@ func (x *Server) scrape(c *fiber.Ctx) (err error) {
 	siteURL := c.Query("url")
 	fmt.Println(siteURL)
 
-	recipe, err := x.client.GetRecipies(siteURL)
+	recipe, err := x.client.GetRecipe(siteURL)
 	switch err.(type) {
 	case nil:
 	case recipeclient.NotFoundError:
@@ -47,7 +47,7 @@ func (x *Server) scrapeAll(c *fiber.Ctx) (err error) {
 	siteURL := c.Query("url")
 	fmt.Println(siteURL)
 
-	recipe, err := x.client.GetRecipies(siteURL)
+	recipe, err := x.client.GetRecipe(siteURL)
 	switch err.(type) {
 	case nil:
 	case recipeclient.NotFoundError:

@@ -134,8 +134,8 @@ type itemType struct {
 	description string
 }
 
-// GetRecipies - extract any recipies from the URL site provided. returns []SchemaRecipe
-func (x *RecipeClient) GetRecipies(siteUrl string) (recipe SchemaRecipe, err error) {
+// GetRecipe - extract any recipies from the URL site provided. returns []SchemaRecipe
+func (x *RecipeClient) GetRecipe(siteUrl string) (recipe SchemaRecipe, err error) {
 	// first, look for cached recipe
 	cRecepe, err := x.cachedRecipe(siteUrl)
 	if  err == nil {
