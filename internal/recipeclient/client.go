@@ -3,15 +3,17 @@ package recipeclient
 // contains definitions and functions for accessing and parsing recipes from URLs
 
 import (
-	"bytes"
-	"encoding/json"
+	"fmt"
 	"github.com/valyala/fasthttp"
-	"golang.org/x/net/html"
-	"strings"
+	"net/url"
+	"scraper/internal/scraper"
+	"time"
 )
 
 const (
-	RecipeType = "Recipe"
+	ReadTimeout = time.Second * 60
+	RecipeType  = "Recipe"
+	LdType      = "@type"
 )
 
 type NotFoundError struct {
@@ -22,95 +24,118 @@ func (x NotFoundError) Error() string {
 	return x.message
 }
 
-type RecipeSchema1 struct {
-	RecipeIngredient   []string    `json:"recipeIngredient"`
+type TimeOutError struct {
+	message string
 }
 
-type RecipeSchema2 struct {
-	Context string `json:"@context"`
-	Graph   []struct {
-		RecipeIngredient   []string `json:"recipeIngredient,omitempty"`
-	} `json:"@graph"`
+func (x TimeOutError) Error() string {
+	return x.message
 }
 
 // GetRecipe - extract any recipes from the URL site provided. returns interface
-func (x *RecipeClient) GetRecipe(siteUrl string) (recipe interface{}, err error) {
+func (x *RecipeClient) GetRecipe(siteUrl string) (recipe *scraper.RecipeObject, err error) {
 	// first, look for cached recipe
-	/*
-	cRecipe, err := x.cachedRecipe(siteUrl)
-	if err == nil {
-		// found
-		recipe = cRecipe
+	if r, ok := x.scrape.CachedRecipe(siteUrl); ok {
+		recipe = &r
 		return
 	}
-	 */
+	if x.domainIsBad(siteUrl) {
+		err = TimeOutError{"Domain name attempts exceeded"}
+		return
+	}
+
+	// limit the number of concurrent transactions to avoid overloading the network
+	x.maxWorkers.Acquire(x.ctx, 1)
+	defer x.maxWorkers.Release(1)
 
 	// Continue by getting recipe web page
 	// format a GET request
+
 	req := fasthttp.AcquireRequest()
 	resp := fasthttp.AcquireResponse()
 
 	req.SetRequestURI(siteUrl)
-	err = x.client.DoRedirects(req, resp, 5)
+
+	/*
+		for retry := 0; retry < 2; retry++ {
+			if err == nil {
+				break
+			}
+		}
+	*/
+	//err = x.client.DoRedirects(req, resp, 3)
+	err = x.client.DoRedirects(req, resp, 100)
+	switch err {
+	case nil:
+		// successfully communicated with a domain name
+		x.domainIsGood(siteUrl)
+
+		switch resp.StatusCode() {
+		case fasthttp.StatusOK:
+			found := false
+			recipe, found = x.scrape.ScrapeRecipe(siteUrl, resp.Body())
+			if !found {
+				err = NotFoundError{"No Recipe Found"}
+				return
+			}
+			err = nil
+		case fasthttp.StatusMovedPermanently, fasthttp.StatusFound, fasthttp.StatusTemporaryRedirect, fasthttp.StatusPermanentRedirect:
+			err = NotFoundError{"Recipe site has moved or is no longer available"}
+			return
+		default:
+			err = fmt.Errorf("HTTP status code %d", resp.StatusCode())
+			return
+		}
+	case fasthttp.ErrTimeout:
+		err = TimeOutError{err.Error()}
+		return
+	case fasthttp.ErrNoFreeConns:
+		err = TimeOutError{err.Error()}
+		return
+	}
+	return
+}
+
+func (x *RecipeClient) domainIsBad(siteUrl string) (bad bool) {
+	u, err := url.Parse(siteUrl)
+	if err != nil {
+		return false
+	}
+	x.badDomainLock.RLock()
+	cnt, ok := x.badDomainMap[u.Host]
+	x.badDomainLock.RUnlock()
+	if !ok {
+		return false
+	}
+	if cnt > 10 {
+		return true
+	}
+	return false
+}
+
+// domainIsGood domain name worked for http
+func (x *RecipeClient) domainIsGood(siteUrl string) {
+	u, err := url.Parse(siteUrl)
 	if err != nil {
 		return
 	}
-
-	recipe, err = x.parseForJSONRecipe(siteUrl, resp.Body())
+	x.badDomainLock.Lock()
+	delete(x.badDomainMap, u.Host)
+	x.badDomainLock.Unlock()
 	return
 }
 
-// parseForJSONRecipe parse through the HTML looking for schema.org json-ld format
-func (x *RecipeClient) parseForJSONRecipe(siteUrl string, body []byte) (recipe interface{}, err error) {
-	tokenizer := html.NewTokenizer(bytes.NewReader(body))
-	for {
-		tokenType := tokenizer.Next()
-		switch tokenType {
-		case html.ErrorToken:
-			err = nil
-			return
-		case html.TextToken:
-			text := tokenizer.Text()
-			if !strings.Contains(string(text), RecipeType) {
-				continue
-			}
-			r1 := RecipeSchema1{}
-			err = json.Unmarshal(text, &r1)
-			if err == nil {
-				//fmt.Println(string(text))
-				if len(r1.RecipeIngredient) > 0 {
-					recipe = r1
-					x.addRecipeToCache(siteUrl, &recipe)
-					return
-				}
-			}
-			r2 := RecipeSchema2{}
-			err = json.Unmarshal(text, &r2)
-			if err == nil {
-				for _, entry := range r2.Graph{
-					if len(entry.RecipeIngredient) > 0 {
-						recipe = r2
-						x.addRecipeToCache(siteUrl, &recipe)
-						return
-					}
-				}
-			}
-		}
-	}
-}
-
-func (x *RecipeClient) cachedRecipe(siteUrl string) (recipe interface{}, err error) {
-	// cache lookup to avoid HTTP transactions
-	recipe, found := x.cache.Get(siteUrl)
-	if !found {
-		err = NotFoundError{"No cache recipe"}
+func (x *RecipeClient) addBadDomain(siteUrl string) {
+	u, err := url.Parse(siteUrl)
+	if err != nil {
 		return
 	}
-	return
-}
-
-func (x *RecipeClient) addRecipeToCache(siteUrl string, recipe interface{}) (err error) {
-	x.cache.Set(siteUrl, recipe, 1)
-	x.cache.Wait()
-	return
+	x.badDomainLock.Lock()
+	defer x.badDomainLock.Unlock()
+	cnt, bad := x.badDomainMap[u.Host]
+	if !bad {
+		x.badDomainMap[u.Host] = 0
+	}
+	cnt++
+	x.badDomainMap[u.Host]++
 }

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"scraper/internal/httpserver"
 	"scraper/internal/recipeclient"
+	"scraper/internal/scraper"
 	"scraper/internal/util"
 )
 
@@ -16,6 +17,7 @@ type Config struct {
 	Server        *httpserver.Server
 	serverAddress string
 	serverPort    int
+	scrape scraper.Scraper
 }
 
 // New - returns an empty *Config
@@ -24,7 +26,8 @@ func New() *Config {
 }
 
 func (x *Config) Main() {
-	x.ConfigRecipeClient().
+	x.ConfigScraper().
+		ConfigRecipeClient().
 		CommandLineOptions().
 		ConfigServer().
 		Start()
@@ -34,6 +37,10 @@ func (x *Config) CommandLineOptions() *Config {
 	flag.StringVar(&x.serverAddress, "a", "0.0.0.0", "Server IP address")
 	flag.IntVar(&x.serverPort, "p", 9000, "Server port number")
 	flag.Parse()
+	return x
+}
+
+func (x *Config) ConfigScraper() *Config {
 	return x
 }
 

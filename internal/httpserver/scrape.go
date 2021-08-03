@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"scraper/internal/recipeclient"
+	"strings"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -18,7 +19,14 @@ type IngredientResponse struct {
 
 // scrape - dump all of the found recipe details to the browser
 func (x *Server) scrape(c *fiber.Ctx) (err error) {
-	siteURL := c.Query("url")
+	siteURL := c.OriginalURL()
+	parts := strings.SplitN(siteURL,"=", 2)
+	if len(parts) != 2 {
+		err = fmt.Errorf("No url parameter specified")
+		c.SendString(err.Error())
+		return c.SendStatus(http.StatusBadRequest)
+	}
+	siteURL = parts[1]
 	fmt.Println(siteURL)
 
 	recipe, err := x.client.GetRecipe(siteURL)
@@ -31,29 +39,9 @@ func (x *Server) scrape(c *fiber.Ctx) (err error) {
 		c.SendString(err.Error())
 		return c.SendStatus(http.StatusBadRequest)
 	}
-	switch r := recipe.(type) {
-	case nil:
-		c.SendString("NotFound\n")
-		return c.SendStatus(http.StatusNotFound)
-	case recipeclient.RecipeSchema1:
-		b, err := JSONMarshal(r)
-		if err == nil {
-			return c.SendString(string(b))
-		}
-	case recipeclient.RecipeSchema2:
-		for _, entry := range r.Graph {
-			if len(entry.RecipeIngredient) > 0 {
-				b, err := JSONMarshal(entry)
-				if err == nil {
-					return c.SendString(string(b))
-				}
-			}
-		}
-	default:
-		b, err := JSONMarshal(r)
-		if err == nil {
-			return c.SendString(string(b))
-		}
+	b, err := JSONMarshal(recipe)
+	if err == nil {
+		return c.SendString(string(b))
 	}
 	return c.SendStatus(http.StatusNotFound)
 }
