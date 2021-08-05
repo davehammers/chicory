@@ -15,6 +15,7 @@ const (
 	HTML2RecipeType RecipeParseType = "HTML2"
 	HTML3RecipeType RecipeParseType = "HTML3"
 	HTML4RecipeType RecipeParseType = "HTML4"
+	HTML5RecipeType RecipeParseType = "HTML5"
 )
 
 type RecipeObject struct {

@@ -16,11 +16,13 @@ func (x *Scraper) htmlParser(siteUrl string, body []byte, recipe *RecipeObject) 
 	case x.html2Scraper(siteUrl, body, recipe):
 	case x.html3Scraper(siteUrl, body, recipe):
 	case x.html4Scraper(siteUrl, body, recipe):
+	case x.html5Scraper(siteUrl, body, recipe):
 	default:
 		return false
 	}
 	return true
 }
+
 /*
 <li class="ingredient" itemprop="ingredients">head of raw cauliflower, chopped into florets</li>
 <li class="ingredient" itemprop="ingredients">tablespoon olive oil</li>
@@ -28,7 +30,7 @@ func (x *Scraper) htmlParser(siteUrl string, body []byte, recipe *RecipeObject) 
 <li class="ingredient" itemprop="ingredients">stalks of curly kale, stem removed and chopped</li>
 <li class="ingredient" itemprop="ingredients">1 teaspoon salt</li>
 <li class="ingredient" itemprop="ingredients">1/2 teaspoon pepper</li>
- */
+*/
 func (x *Scraper) html1Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
 	textIsIngredient := false
 	ingredients := make([]string, 0)
@@ -93,7 +95,7 @@ func (x *Scraper) html1Scraper(siteUrl string, body []byte, recipe *RecipeObject
 */
 func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
 	rawTag := ""
-	ingredientParts := make([]string,0)
+	ingredientParts := make([]string, 0)
 	textIsIngredient := false
 	ingredients := make([]string, 0)
 	tokenizer := html.NewTokenizer(bytes.NewReader(body))
@@ -115,11 +117,14 @@ func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject
 				switch string(name) {
 				case "span":
 					switch {
-					case strings.Contains(rawTag, "ingredient-amount"):
-					case strings.Contains(rawTag, "ingredient-unit"):
-					case strings.Contains(rawTag, "ingredient-name"):
+					case strings.Contains(rawTag, `"amount"`):
+					case strings.Contains(rawTag, `"unit"`):
+					case strings.Contains(rawTag, `"name"`):
+					case strings.Contains(rawTag, `"ingredient"`):
+					case strings.Contains(rawTag, `"numerator"`):
+					case strings.Contains(rawTag, `"solidus"`):
+					case strings.Contains(rawTag, `"denominator"`):
 					default:
-						textIsIngredient = false
 						continue
 					}
 					textIsIngredient = true
@@ -130,16 +135,11 @@ func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject
 			text = strings.TrimRight(text, "\n ")
 			text = strings.TrimSpace(text)
 			if textIsIngredient {
+				ingredientParts = append(ingredientParts, text)
 				switch {
-				case strings.Contains(rawTag, "ingredient-amount"):
-					ingredientParts = make([]string,0)
-					ingredientParts = append(ingredientParts, text)
-				case strings.Contains(rawTag, "ingredient-unit"):
-					ingredientParts = append(ingredientParts, text)
-				case strings.Contains(rawTag, "ingredient-name"):
-					ingredientParts = append(ingredientParts, text)
-					//fmt.Println(string(text))
-					ingredients = append(ingredients, strings.Join(ingredientParts," "))
+				case strings.Contains(rawTag, "name"),strings.Contains(rawTag, "ingredient") :
+					ingredients = append(ingredients, strings.Join(ingredientParts, " "))
+					ingredientParts = make([]string, 0)
 					textIsIngredient = false
 				}
 			}
@@ -153,7 +153,7 @@ func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject
 <div id="zlrecipe-ingredient-0" class="ingredient" itemprop="ingredients">3 c. candy corn
 </div><div id="zlrecipe-ingredient-1" class="ingredient" itemprop="ingredients">1½ c. peanut butter
 </div><div id="zlrecipe-ingredient-2" class="ingredient" itemprop="ingredients">2 c. (12 oz) chocolate chips </div></span>
- */
+*/
 func (x *Scraper) html3Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
 	textIsIngredient := false
 	ingredients := make([]string, 0)
@@ -180,7 +180,6 @@ func (x *Scraper) html3Scraper(siteUrl string, body []byte, recipe *RecipeObject
 		case html.TextToken:
 			text := tokenizer.Text()
 			if textIsIngredient {
-				//fmt.Println(string(text))
 				ingredients = append(ingredients, string(text))
 				textIsIngredient = false
 			}
@@ -188,6 +187,7 @@ func (x *Scraper) html3Scraper(siteUrl string, body []byte, recipe *RecipeObject
 	}
 	return false
 }
+
 /*
 <div class="mv-create-ingredients">
 <h3 class="mv-create-ingredients-title mv-create-title-secondary">Ingredients</h3>
@@ -233,7 +233,7 @@ position:relative !important;
 margin-bottom: 18px !important;
 margin-top: 9px !important;
 ">
- */
+*/
 func (x *Scraper) html4Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
 	textIsIngredient := false
 	ingredients := make([]string, 0)
@@ -265,7 +265,7 @@ func (x *Scraper) html4Scraper(siteUrl string, body []byte, recipe *RecipeObject
 			}
 		case html.TextToken:
 			text := string(tokenizer.Text())
-			if textIsIngredient{
+			if textIsIngredient {
 				text = strings.TrimRight(text, "\n ")
 				text = strings.TrimSpace(text)
 				if text == "" {
@@ -275,6 +275,58 @@ func (x *Scraper) html4Scraper(siteUrl string, body []byte, recipe *RecipeObject
 					continue
 				}
 				ingredients = append(ingredients, text)
+			}
+		}
+	}
+	return false
+}
+func (x *Scraper) html5Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+	rawTag := ""
+	ingredientParts := make([]string, 0)
+	textIsIngredient := false
+	ingredients := make([]string, 0)
+	tokenizer := html.NewTokenizer(bytes.NewReader(body))
+	for {
+		tokenType := tokenizer.Next()
+		switch tokenType {
+		case html.ErrorToken:
+			if len(ingredients) > 0 {
+				recipe.Type = HTML5RecipeType
+				recipe.RecipeIngredient = ingredients
+				return true
+			}
+			return false
+		case html.StartTagToken:
+			name, _ := tokenizer.TagName()
+			rawTag = string(tokenizer.Raw())
+			switch string(name) {
+			case "span":
+				switch {
+				case strings.Contains(rawTag, "value"):
+				case strings.Contains(rawTag, "type"):
+				case strings.Contains(rawTag, "name"):
+				default:
+					textIsIngredient = false
+					continue
+				}
+				textIsIngredient = true
+			}
+		case html.TextToken:
+			text := string(tokenizer.Text())
+			text = strings.TrimRight(text, "\n ")
+			text = strings.TrimSpace(text)
+			if textIsIngredient {
+				switch {
+				case strings.Contains(rawTag, "value"):
+					ingredientParts = make([]string, 0)
+					ingredientParts = append(ingredientParts, text)
+				case strings.Contains(rawTag, "type"):
+					ingredientParts = append(ingredientParts, text)
+				case strings.Contains(rawTag, "name"):
+					ingredientParts = append(ingredientParts, text)
+					ingredients = append(ingredients, strings.Join(ingredientParts, " "))
+					textIsIngredient = false
+				}
 			}
 		}
 	}
