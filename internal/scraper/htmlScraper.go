@@ -94,9 +94,11 @@ func (x *Scraper) html1Scraper(siteUrl string, body []byte, recipe *RecipeObject
 </div>
 */
 func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+	//os.WriteFile("dump.html",body,0666)
 	rawTag := ""
-	ingredientParts := make([]string, 0)
+	ingredientParts := ""
 	textIsIngredient := false
+	addTrailingSpace := false
 	ingredients := make([]string, 0)
 	tokenizer := html.NewTokenizer(bytes.NewReader(body))
 	for {
@@ -117,30 +119,53 @@ func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject
 				switch string(name) {
 				case "span":
 					switch {
-					case strings.Contains(rawTag, `"amount"`):
+					case strings.Contains(rawTag, "amount"):
+						addTrailingSpace = true
+					case strings.Contains(rawTag, "quantity"):
+						addTrailingSpace = true
 					case strings.Contains(rawTag, `"unit"`):
-					case strings.Contains(rawTag, `"name"`):
-					case strings.Contains(rawTag, `"ingredient"`):
-					case strings.Contains(rawTag, `"numerator"`):
-					case strings.Contains(rawTag, `"solidus"`):
-					case strings.Contains(rawTag, `"denominator"`):
+						addTrailingSpace = true
+					case strings.Contains(rawTag, "name"):
+						addTrailingSpace = false
+					case strings.Contains(rawTag, "ingredient"):
+						addTrailingSpace = false
+					case strings.Contains(rawTag, "numerator"):
+						addTrailingSpace = false
+					case strings.Contains(rawTag, "solidus"):
+						addTrailingSpace = false
+					case strings.Contains(rawTag, "denominator"):
+						addTrailingSpace = true
 					default:
 						continue
 					}
 					textIsIngredient = true
 				}
 			}
+		case html.EndTagToken:
+			name, _ := tokenizer.TagName()
+			rawTag = string(tokenizer.Raw())
+			switch string(name) {
+			case "span":
+				textIsIngredient = false
+			}
 		case html.TextToken:
-			text := string(tokenizer.Text())
-			text = strings.TrimRight(text, "\n ")
-			text = strings.TrimSpace(text)
 			if textIsIngredient {
-				ingredientParts = append(ingredientParts, text)
+				text := string(tokenizer.Text())
+				text = strings.TrimRight(text, "\n ")
+				text = strings.TrimSpace(text)
+				if text == "" {
+					break
+				}
+				ingredientParts += text
+				if addTrailingSpace {
+					ingredientParts	+= " "
+				}
 				switch {
-				case strings.Contains(rawTag, "name"),strings.Contains(rawTag, "ingredient") :
-					ingredients = append(ingredients, strings.Join(ingredientParts, " "))
-					ingredientParts = make([]string, 0)
-					textIsIngredient = false
+				case strings.Contains(rawTag, "name"):
+					fallthrough
+				case strings.Contains(rawTag, "ingredient") :
+					ingredients = append(ingredients,ingredientParts)
+					ingredientParts	= ""
 				}
 			}
 		}
