@@ -5,6 +5,7 @@ package scraper
 import (
 	"bytes"
 	"encoding/json"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 	"strings"
 )
@@ -28,13 +29,15 @@ func (x *Scraper) jsonParser(siteUrl string, body []byte, recipe *RecipeObject) 
 			//continue
 			//}
 			switch {
-			case x.jsonSchema1(text, recipe):
+			case x.jsonSchema1(siteUrl, text, recipe):
 				return true
-			case x.jsonSchema2(text, recipe):
+			case x.jsonSchema2(siteUrl, text, recipe):
 				return true
-			case x.jsonSchema3(text, recipe):
+			case x.jsonSchema3(siteUrl, text, recipe):
 				return true
-			case x.jsonSchema4(text, recipe):
+			case x.jsonSchema4(siteUrl, text, recipe):
+				return true
+			case x.jsonSchemaRemoveHTML(siteUrl, text, recipe):
 				return true
 			default:
 				continue
@@ -44,24 +47,26 @@ func (x *Scraper) jsonParser(siteUrl string, body []byte, recipe *RecipeObject) 
 	return false
 }
 
+// flat schema.org recipe
 type RecipeSchema1 struct {
 	RecipeIngredient []string `json:"recipeIngredient"`
 }
 
 // jsonSchema1 parse json schema 1
-func (x *Scraper) jsonSchema1(text []byte, recipe *RecipeObject) (ok bool) {
+func (x *Scraper) jsonSchema1(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
 	r := RecipeSchema1{}
 	err := json.Unmarshal(text, &r)
 	if err == nil {
 		if len(r.RecipeIngredient) > 0 {
 			recipe.Type = JSON1RecipeType
-			recipe.RecipeIngredient = r.RecipeIngredient
+			x.jsonAppend(recipe, r.RecipeIngredient)
 			return true
 		}
 	}
 	return false
 }
 
+// nexted in Graph data
 type RecipeSchema2 struct {
 	Context string `json:"@context"`
 	Graph   []struct {
@@ -70,14 +75,14 @@ type RecipeSchema2 struct {
 }
 
 // jsonSchema2 parse json schema 2
-func (x *Scraper) jsonSchema2(text []byte, recipe *RecipeObject) (ok bool) {
+func (x *Scraper) jsonSchema2(siteURL string, text []byte, recipe *RecipeObject) (ok bool) {
 	r := RecipeSchema2{}
 	err := json.Unmarshal(text, &r)
 	if err == nil {
 		for _, entry := range r.Graph {
 			if len(entry.RecipeIngredient) > 0 {
 				recipe.Type = JSON2RecipeType
-				recipe.RecipeIngredient = entry.RecipeIngredient
+				x.jsonAppend(recipe, entry.RecipeIngredient)
 				return true
 			}
 		}
@@ -85,6 +90,7 @@ func (x *Scraper) jsonSchema2(text []byte, recipe *RecipeObject) (ok bool) {
 	return false
 }
 
+// top level list
 type RecipeSchema3 []struct {
 	Context          string   `json:"@context"`
 	Type             string   `json:"@type"`
@@ -92,13 +98,51 @@ type RecipeSchema3 []struct {
 }
 
 // jsonSchema3 parse json schema 3
-func (x *Scraper) jsonSchema3(text []byte, recipe *RecipeObject) (ok bool) {
+func (x *Scraper) jsonSchema3(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
 	r := RecipeSchema3{}
 	err := json.Unmarshal(text, &r)
 	if err == nil {
 		for _, entry := range r {
 			if len(entry.RecipeIngredient) > 0 {
 				recipe.Type = JSON3RecipeType
+				x.jsonAppend(recipe, entry.RecipeIngredient)
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// jsonSchema3 parse json schema 3
+func (x *Scraper) jsonAppend(recipe *RecipeObject, list []string) {
+	for _, text := range list{
+		if text == "" {
+			continue
+		}
+		text = strings.TrimSpace(text)
+		recipe.RecipeIngredient =  append(recipe.RecipeIngredient, text)
+	}
+}
+
+type RecipeSchema4 struct {
+	Context         string `json:"@context"`
+	Type            string `json:"@type"`
+	ItemListElement []struct {
+		RecipeIngredient []string `json:"recipeIngredient"`
+	} `json:"itemListElement"`
+	NumberOfItems int    `json:"numberOfItems"`
+	ItemListOrder string `json:"itemListOrder"`
+}
+
+// jsonSchema4 parse json schema 4
+// https://www.yummly.com/recipe/Roasted-garlic-caesar-dipping-sauce-297499
+func (x *Scraper) jsonSchema4(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
+	r := RecipeSchema4{}
+	err := json.Unmarshal(text, &r)
+	if err == nil {
+		for _, entry := range r.ItemListElement {
+			if len(entry.RecipeIngredient) > 0 {
+				recipe.Type = JSON4RecipeType
 				recipe.RecipeIngredient = entry.RecipeIngredient
 				return true
 			}
@@ -107,12 +151,13 @@ func (x *Scraper) jsonSchema3(text []byte, recipe *RecipeObject) (ok bool) {
 	return false
 }
 
-// jsonSchema4 parse json schema 3
+// jsonSchemaRemoveHTML parse json schema RemoveHTML
 // this parser assumes that there is HTML mixed in with the JSON
-func (x *Scraper) jsonSchema4(body []byte, recipe *RecipeObject) (ok bool) {
+// It tries to remove all of the mixed in HTML then reprocess the JSON
+func (x *Scraper) jsonSchemaRemoveHTML(siteUrl string, body []byte, recipe *RecipeObject) (ok bool) {
 	textOut := make([]string, 0)
 	// is this a schema.org JSON string
-	if !strings.Contains(string(body), "schema.org") {
+	if !strings.Contains(string(body), "recipeIngredient") {
 		return false
 	}
 
@@ -138,13 +183,17 @@ func (x *Scraper) jsonSchema4(body []byte, recipe *RecipeObject) (ok bool) {
 	}
 	// now try the json parsers again
 	text := []byte(strings.Join(textOut, " "))
+	log.Info(string(text))
 	switch {
-	case x.jsonSchema1(text, recipe):
+	case x.jsonSchema1(siteUrl, text, recipe):
 		return true
-	case x.jsonSchema2(text, recipe):
+	case x.jsonSchema2(siteUrl, text, recipe):
 		return true
-	case x.jsonSchema3(text, recipe):
+	case x.jsonSchema3(siteUrl, text, recipe):
+		return true
+	case x.jsonSchema4(siteUrl, text, recipe):
 		return true
 	}
+	log.Error(siteUrl, "body contains schema.org/recipeIngredient json but did not parse")
 	return false
 }

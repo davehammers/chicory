@@ -11,6 +11,8 @@ const (
 	JSON1RecipeType RecipeParseType = "JSON1"
 	JSON2RecipeType RecipeParseType = "JSON2"
 	JSON3RecipeType RecipeParseType = "JSON3"
+	JSON4RecipeType RecipeParseType = "JSON4"
+	JSON5RecipeType RecipeParseType = "JSON5"
 	HTML1RecipeType RecipeParseType = "HTML1"
 	HTML2RecipeType RecipeParseType = "HTML2"
 	HTML3RecipeType RecipeParseType = "HTML3"
@@ -25,6 +27,7 @@ type RecipeObject struct {
 
 // ScrapeRecipe scrapes recipe from body returns RecipeObject,ok= true if found
 func (x *Scraper) ScrapeRecipe(siteUrl string, body []byte) (recipe *RecipeObject, found bool) {
+	//os.WriteFile("dump.html",body,0666)
 	recipe = &RecipeObject{}
 	switch {
 	case x.jsonParser(siteUrl, body, recipe):

@@ -4,7 +4,9 @@ package recipeclient
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
+	"golang.org/x/time/rate"
 	"net/url"
 	"scraper/internal/scraper"
 	"time"
@@ -39,10 +41,8 @@ func (x *RecipeClient) GetRecipe(siteUrl string) (recipe *scraper.RecipeObject, 
 		recipe = &r
 		return
 	}
-	if x.domainIsBad(siteUrl) {
-		err = TimeOutError{"Domain name attempts exceeded"}
-		return
-	}
+	// call rate limiter for the domain to avoid overloading website
+	x.waitForDomain(siteUrl)
 
 	// limit the number of concurrent transactions to avoid overloading the network
 	x.maxWorkers.Acquire(x.ctx, 1)
@@ -51,91 +51,49 @@ func (x *RecipeClient) GetRecipe(siteUrl string) (recipe *scraper.RecipeObject, 
 	// Continue by getting recipe web page
 	// format a GET request
 
-	req := fasthttp.AcquireRequest()
-	resp := fasthttp.AcquireResponse()
+	dst := make([]byte,128*1024)
+	statusCode, body, err := x.client.GetTimeout(dst, siteUrl, time.Second * 60)
 
-	req.SetRequestURI(siteUrl)
-
-	/*
-		for retry := 0; retry < 2; retry++ {
-			if err == nil {
-				break
-			}
-		}
-	*/
-	//err = x.client.DoRedirects(req, resp, 3)
-	err = x.client.DoRedirects(req, resp, 100)
+	//req := fasthttp.AcquireRequest()
+	//resp := fasthttp.AcquireResponse()
+	//req.SetRequestURI(siteUrl)
+	//err = x.client.DoTimeout(req, resp, time.Second * 60)
 	switch err {
 	case nil:
 		// successfully communicated with a domain name
-		x.domainIsGood(siteUrl)
-
-		switch resp.StatusCode() {
+		switch statusCode {
 		case fasthttp.StatusOK:
 			found := false
-			recipe, found = x.scrape.ScrapeRecipe(siteUrl, resp.Body())
+			recipe, found = x.scrape.ScrapeRecipe(siteUrl, body)
 			if !found {
 				err = NotFoundError{"No Recipe Found"}
 				return
 			}
 			err = nil
-		case fasthttp.StatusMovedPermanently, fasthttp.StatusFound, fasthttp.StatusTemporaryRedirect, fasthttp.StatusPermanentRedirect:
-			err = NotFoundError{"Recipe site has moved or is no longer available"}
-			return
 		default:
-			err = fmt.Errorf("HTTP status code %d", resp.StatusCode())
+			err = fmt.Errorf("HTTP status code %d", statusCode)
 			return
 		}
-	case fasthttp.ErrTimeout:
-		err = TimeOutError{err.Error()}
-		return
-	case fasthttp.ErrNoFreeConns:
-		err = TimeOutError{err.Error()}
-		return
 	}
 	return
 }
 
-func (x *RecipeClient) domainIsBad(siteUrl string) (bad bool) {
+func (x *RecipeClient) waitForDomain(siteUrl string) {
 	u, err := url.Parse(siteUrl)
 	if err != nil {
-		return false
+		return
 	}
-	x.badDomainLock.RLock()
-	cnt, ok := x.badDomainMap[u.Host]
-	x.badDomainLock.RUnlock()
+	x.domainRateLock.Lock()
+	limiter, ok := x.domainRateMap[u.Host]
 	if !ok {
-		return false
+		// domain does not have a rate limiter yet
+		// set one up
+		limiter = rate.NewLimiter(rate.Limit(1), 1)
+		x.domainRateMap[u.Host] = limiter
 	}
-	if cnt > 10 {
-		return true
+	x.domainRateLock.Unlock()
+	if err = limiter.Wait(x.ctx); err != nil {
+		log.Warn(err)
 	}
-	return false
 }
 
-// domainIsGood domain name worked for http
-func (x *RecipeClient) domainIsGood(siteUrl string) {
-	u, err := url.Parse(siteUrl)
-	if err != nil {
-		return
-	}
-	x.badDomainLock.Lock()
-	delete(x.badDomainMap, u.Host)
-	x.badDomainLock.Unlock()
-	return
-}
-
-func (x *RecipeClient) addBadDomain(siteUrl string) {
-	u, err := url.Parse(siteUrl)
-	if err != nil {
-		return
-	}
-	x.badDomainLock.Lock()
-	defer x.badDomainLock.Unlock()
-	cnt, bad := x.badDomainMap[u.Host]
-	if !bad {
-		x.badDomainMap[u.Host] = 0
-	}
-	cnt++
-	x.badDomainMap[u.Host]++
-}

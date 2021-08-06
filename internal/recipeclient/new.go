@@ -8,6 +8,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"github.com/valyala/fasthttp"
 	"golang.org/x/sync/semaphore"
+	"golang.org/x/time/rate"
 	"scraper/internal/scraper"
 	"sync"
 	"time"
@@ -16,8 +17,8 @@ import (
 type RecipeClient struct {
 	client *fasthttp.Client
 	cache  *ristretto.Cache
-	badDomainMap map[string]int
-	badDomainLock *sync.RWMutex
+	domainRateMap map[string]*rate.Limiter
+	domainRateLock *sync.RWMutex
 	ctx context.Context
 	maxWorkers *semaphore.Weighted
 	scrape *scraper.Scraper
@@ -29,9 +30,9 @@ func New() *RecipeClient {
 
 	c := RecipeClient{
 		ctx: context.Background(),
-		maxWorkers: semaphore.NewWeighted(200),
-		badDomainMap: make(map[string]int),
-		badDomainLock: &sync.RWMutex{},
+		maxWorkers: semaphore.NewWeighted(5000),
+		domainRateMap: make(map[string]*rate.Limiter),
+		domainRateLock: &sync.RWMutex{},
 		scrape: &scraper.Scraper{},
 	}
 	c.client = &fasthttp.Client{

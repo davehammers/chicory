@@ -27,7 +27,7 @@ func TestRecipeClient_GetRecipe(t *testing.T) {
 	defer f.Close()
 
 	ctx := context.Background()
-	sem := semaphore.NewWeighted(2000)
+	sem := semaphore.NewWeighted(50000)
 	wg := sync.WaitGroup{}
 	sc := bufio.NewScanner(f)
 	for sc.Scan() {

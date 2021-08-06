@@ -8,6 +8,11 @@ import (
 	"strings"
 )
 
+type tokenActions struct {
+	addSpace bool
+	end      bool
+}
+
 type HTMLScraper func(siteUrl string, body []byte, recipe *RecipeObject) (found bool)
 
 func (x *Scraper) htmlParser(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
@@ -16,7 +21,6 @@ func (x *Scraper) htmlParser(siteUrl string, body []byte, recipe *RecipeObject) 
 	case x.html2Scraper(siteUrl, body, recipe):
 	case x.html3Scraper(siteUrl, body, recipe):
 	case x.html4Scraper(siteUrl, body, recipe):
-	case x.html5Scraper(siteUrl, body, recipe):
 	default:
 		return false
 	}
@@ -32,8 +36,20 @@ func (x *Scraper) htmlParser(siteUrl string, body []byte, recipe *RecipeObject) 
 <li class="ingredient" itemprop="ingredients">1/2 teaspoon pepper</li>
 */
 func (x *Scraper) html1Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+	tokenWords := map[string]tokenActions{
+		`class="ingredient"`:               {false, true},
+		`class="ingredient `:               {false, true},
+		`class="ingredients"`:              {false, true},
+		`itemprop="ingredients"`:           {false, true},
+		`itemprop=ingredients`:              {false, true},
+		`class="ingredient-item"`:          {false, true},
+	}
+	// current action for text token
+	var textAction tokenActions
+
 	textIsIngredient := false
 	ingredients := make([]string, 0)
+	ingredientParts := ""
 	tokenizer := html.NewTokenizer(bytes.NewReader(body))
 	for {
 		tokenType := tokenizer.Next()
@@ -49,18 +65,39 @@ func (x *Scraper) html1Scraper(siteUrl string, body []byte, recipe *RecipeObject
 			name, _ := tokenizer.TagName()
 			switch string(name) {
 			case "li":
-				rawTag := string(tokenizer.Raw())
-				if strings.Contains(rawTag, "ingredient") {
-					textIsIngredient = true
+				rawTag := strings.ToLower(string(tokenizer.Raw()))
+				for k, v := range tokenWords {
+					if strings.Contains(rawTag, k) {
+						textAction = v
+						textIsIngredient = true
+						break
+					}
 				}
+			case "span":
+				textIsIngredient = false
+			}
+		case html.EndTagToken:
+			name, _ := tokenizer.TagName()
+			switch string(name) {
+			case "li":
+				textIsIngredient = false
 			}
 		case html.TextToken:
-			text := string(tokenizer.Text())
-			text = strings.TrimRight(text, "\n ")
-			text = strings.TrimSpace(text)
 			if textIsIngredient {
-				ingredients = append(ingredients, string(text))
-				textIsIngredient = false
+				text := string(tokenizer.Text())
+				text = strings.TrimRight(text, "\n ")
+				text = strings.TrimSpace(text)
+				if text == "" {
+					break
+				}
+				ingredientParts += text
+				if textAction.addSpace {
+					ingredientParts += " "
+				}
+				if textAction.end {
+					ingredients = append(ingredients, ingredientParts)
+					ingredientParts = ""
+				}
 			}
 		}
 	}
@@ -94,11 +131,26 @@ func (x *Scraper) html1Scraper(siteUrl string, body []byte, recipe *RecipeObject
 </div>
 */
 func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
-	//os.WriteFile("dump.html",body,0666)
+	type tokenActions struct {
+		addSpace bool
+		end      bool
+	}
+	tokenWords := map[string]tokenActions{
+		"recipeIngredient":              {false, true},
+		`class="amount"`:                {true, false},
+		`class="name"`:                  {false, true},
+		"wprm-recipe-ingredient-amount": {true, false},
+		"wprm-recipe-ingredient-unit":   {true, false},
+		"wprm-recipe-ingredient-name":   {false, true},
+		"wpurp-recipe-ingredient-quantity": {true, false},
+		"wpurp-recipe-ingredient-name":     {false, true},
+	}
+	// current action for text token
+	var textAction tokenActions
+
 	rawTag := ""
 	ingredientParts := ""
 	textIsIngredient := false
-	addTrailingSpace := false
 	ingredients := make([]string, 0)
 	tokenizer := html.NewTokenizer(bytes.NewReader(body))
 	for {
@@ -116,29 +168,12 @@ func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject
 			rawTag = string(tokenizer.Raw())
 			switch string(name) {
 			case "span":
-				switch string(name) {
-				case "span":
-					switch {
-					case strings.Contains(rawTag, "amount"):
-						addTrailingSpace = true
-					case strings.Contains(rawTag, "quantity"):
-						addTrailingSpace = true
-					case strings.Contains(rawTag, `"unit"`):
-						addTrailingSpace = true
-					case strings.Contains(rawTag, "name"):
-						addTrailingSpace = false
-					case strings.Contains(rawTag, "ingredient"):
-						addTrailingSpace = false
-					case strings.Contains(rawTag, "numerator"):
-						addTrailingSpace = false
-					case strings.Contains(rawTag, "solidus"):
-						addTrailingSpace = false
-					case strings.Contains(rawTag, "denominator"):
-						addTrailingSpace = true
-					default:
-						continue
+				for k, v := range tokenWords {
+					if strings.Contains(rawTag, k) {
+						textAction = v
+						textIsIngredient = true
+						break
 					}
-					textIsIngredient = true
 				}
 			}
 		case html.EndTagToken:
@@ -157,15 +192,12 @@ func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject
 					break
 				}
 				ingredientParts += text
-				if addTrailingSpace {
-					ingredientParts	+= " "
+				if textAction.addSpace {
+					ingredientParts += " "
 				}
-				switch {
-				case strings.Contains(rawTag, "name"):
-					fallthrough
-				case strings.Contains(rawTag, "ingredient") :
-					ingredients = append(ingredients,ingredientParts)
-					ingredientParts	= ""
+				if textAction.end {
+					ingredients = append(ingredients, ingredientParts)
+					ingredientParts = ""
 				}
 			}
 		}
@@ -300,58 +332,6 @@ func (x *Scraper) html4Scraper(siteUrl string, body []byte, recipe *RecipeObject
 					continue
 				}
 				ingredients = append(ingredients, text)
-			}
-		}
-	}
-	return false
-}
-func (x *Scraper) html5Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
-	rawTag := ""
-	ingredientParts := make([]string, 0)
-	textIsIngredient := false
-	ingredients := make([]string, 0)
-	tokenizer := html.NewTokenizer(bytes.NewReader(body))
-	for {
-		tokenType := tokenizer.Next()
-		switch tokenType {
-		case html.ErrorToken:
-			if len(ingredients) > 0 {
-				recipe.Type = HTML5RecipeType
-				recipe.RecipeIngredient = ingredients
-				return true
-			}
-			return false
-		case html.StartTagToken:
-			name, _ := tokenizer.TagName()
-			rawTag = string(tokenizer.Raw())
-			switch string(name) {
-			case "span":
-				switch {
-				case strings.Contains(rawTag, "value"):
-				case strings.Contains(rawTag, "type"):
-				case strings.Contains(rawTag, "name"):
-				default:
-					textIsIngredient = false
-					continue
-				}
-				textIsIngredient = true
-			}
-		case html.TextToken:
-			text := string(tokenizer.Text())
-			text = strings.TrimRight(text, "\n ")
-			text = strings.TrimSpace(text)
-			if textIsIngredient {
-				switch {
-				case strings.Contains(rawTag, "value"):
-					ingredientParts = make([]string, 0)
-					ingredientParts = append(ingredientParts, text)
-				case strings.Contains(rawTag, "type"):
-					ingredientParts = append(ingredientParts, text)
-				case strings.Contains(rawTag, "name"):
-					ingredientParts = append(ingredientParts, text)
-					ingredients = append(ingredients, strings.Join(ingredientParts, " "))
-					textIsIngredient = false
-				}
 			}
 		}
 	}

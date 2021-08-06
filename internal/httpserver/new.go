@@ -64,7 +64,7 @@ func (x *HttpServerIn) NewServer() (out *Server) {
 		BodyLimit:       8 * 1024,
 		WriteBufferSize: 8 * 1024,
 		GETOnly:         true,
-		AppName:         "scrapper",
+		AppName:         "scraper",
 	}
 	out = &Server{
 		server: fiber.New(cfg),
