@@ -1,18 +1,19 @@
 package scraper
+
 // contains definitions and functions for accessing and parsing recipes from URLs
 
 import (
-	log "github.com/sirupsen/logrus"
+	"net/http"
 )
 
 type RecipeParseType string
 
 const (
-	JSON1RecipeType RecipeParseType = "JSON1"
-	JSON2RecipeType RecipeParseType = "JSON2"
-	JSON3RecipeType RecipeParseType = "JSON3"
-	JSON4RecipeType RecipeParseType = "JSON4"
-	JSON5RecipeType RecipeParseType = "JSON5"
+	SchemaOrgRecipeType        RecipeParseType = "SchemaOrgRecipeType"
+	graph_schemaOrgJSONType    RecipeParseType = "embeddedGraphSchemaOrgJSONType"
+	schemaOrg_ListType         RecipeParseType = "schemaOrg_ListType"
+	schemaOrg_ItemListJSONType RecipeParseType = "schemaOrgItemListJSONType"
+
 	HTML1RecipeType RecipeParseType = "HTML1"
 	HTML2RecipeType RecipeParseType = "HTML2"
 	HTML3RecipeType RecipeParseType = "HTML3"
@@ -21,26 +22,31 @@ const (
 )
 
 type RecipeObject struct {
+	SiteURL          string
+	StatusCode       int
+	Error            string
 	Type             RecipeParseType `json:"type"`
 	RecipeIngredient []string        `json:"recipeIngredient"`
 }
 
-// ScrapeRecipe scrapes recipe from body returns RecipeObject,ok= true if found
+// ScrapeRecipe scrapes recipe from body returns RecipeObject, found = true if found
 func (x *Scraper) ScrapeRecipe(siteUrl string, body []byte) (recipe *RecipeObject, found bool) {
-	//os.WriteFile("dump.html",body,0666)
-	recipe = &RecipeObject{}
+	//os.WriteFile("dump.html", body, 0666)
+	recipe = &RecipeObject{
+		SiteURL: siteUrl,
+		StatusCode: http.StatusOK,
+		Error: "",
+	}
 	switch {
 	case x.jsonParser(siteUrl, body, recipe):
 		found = true
 	case x.htmlParser(siteUrl, body, recipe):
 		found = true
 	default:
-		log.Warn("No Parser match ", siteUrl)
+		recipe.StatusCode = http.StatusNotImplemented
+		recipe.Error = "No Parser match"
 		found = false
 		return
-	}
-	if err := x.addRecipeToCache(siteUrl,*recipe);err != nil {
-		log.Warn(err)
 	}
 	return
 }

@@ -17,25 +17,39 @@ const (
 
 // jsonParser tries to extract recipe in JSON-LD format
 func (x *Scraper) jsonParser(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+	insideScript := false
 	tokenizer := html.NewTokenizer(bytes.NewReader(body))
 	for {
 		tokenType := tokenizer.Next()
 		switch tokenType {
 		case html.ErrorToken:
 			return false
+		case html.StartTagToken:
+			name, _ := tokenizer.TagName()
+			switch string(name) {
+			case "script":
+				insideScript = true
+			}
+		case html.EndTagToken:
+			name, _ := tokenizer.TagName()
+			switch string(name) {
+			case "script":
+				insideScript = false
+			}
+
 		case html.TextToken:
+			if !insideScript {
+				break
+			}
 			text := tokenizer.Text()
-			//if !strings.Contains(string(text), LdType) {
-			//continue
-			//}
 			switch {
-			case x.jsonSchema1(siteUrl, text, recipe):
+			case x.schemaOrg_RecipeJSON(siteUrl, text, recipe):
 				return true
-			case x.jsonSchema2(siteUrl, text, recipe):
+			case x.graph_schemaOrgJSON(siteUrl, text, recipe):
 				return true
-			case x.jsonSchema3(siteUrl, text, recipe):
+			case x.schemaOrg_List(siteUrl, text, recipe):
 				return true
-			case x.jsonSchema4(siteUrl, text, recipe):
+			case x.schemaOrg_ItemListJSON(siteUrl, text, recipe):
 				return true
 			case x.jsonSchemaRemoveHTML(siteUrl, text, recipe):
 				return true
@@ -52,13 +66,14 @@ type RecipeSchema1 struct {
 	RecipeIngredient []string `json:"recipeIngredient"`
 }
 
-// jsonSchema1 parse json schema 1
-func (x *Scraper) jsonSchema1(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
+// schemaOrg_RecipeJSON parse json schema 1
+// http://30pepperstreet.com/recipe/endive-salad/
+func (x *Scraper) schemaOrg_RecipeJSON(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
 	r := RecipeSchema1{}
 	err := json.Unmarshal(text, &r)
 	if err == nil {
 		if len(r.RecipeIngredient) > 0 {
-			recipe.Type = JSON1RecipeType
+			recipe.Type = SchemaOrgRecipeType
 			x.jsonAppend(recipe, r.RecipeIngredient)
 			return true
 		}
@@ -74,14 +89,15 @@ type RecipeSchema2 struct {
 	} `json:"@graph"`
 }
 
-// jsonSchema2 parse json schema 2
-func (x *Scraper) jsonSchema2(siteURL string, text []byte, recipe *RecipeObject) (ok bool) {
+// graph_schemaOrgJSON parse json schema 2
+// http://ahealthylifeforme.com/25-minute-garlic-mashed-potatoes
+func (x *Scraper) graph_schemaOrgJSON(siteURL string, text []byte, recipe *RecipeObject) (ok bool) {
 	r := RecipeSchema2{}
 	err := json.Unmarshal(text, &r)
 	if err == nil {
 		for _, entry := range r.Graph {
 			if len(entry.RecipeIngredient) > 0 {
-				recipe.Type = JSON2RecipeType
+				recipe.Type = graph_schemaOrgJSONType
 				x.jsonAppend(recipe, entry.RecipeIngredient)
 				return true
 			}
@@ -97,14 +113,15 @@ type RecipeSchema3 []struct {
 	RecipeIngredient []string `json:"recipeIngredient,omitempty"`
 }
 
-// jsonSchema3 parse json schema 3
-func (x *Scraper) jsonSchema3(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
+// schemaOrg_List parse json schema 3
+// http://allrecipes.com/recipe/12646/cheese-and-garden-vegetable-pie/
+func (x *Scraper) schemaOrg_List(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
 	r := RecipeSchema3{}
 	err := json.Unmarshal(text, &r)
 	if err == nil {
 		for _, entry := range r {
 			if len(entry.RecipeIngredient) > 0 {
-				recipe.Type = JSON3RecipeType
+				recipe.Type = schemaOrg_ListType
 				x.jsonAppend(recipe, entry.RecipeIngredient)
 				return true
 			}
@@ -113,14 +130,15 @@ func (x *Scraper) jsonSchema3(siteUrl string, text []byte, recipe *RecipeObject)
 	return false
 }
 
-// jsonSchema3 parse json schema 3
+// schemaOrg_List parse json schema 3
+// http://ahealthylifeforme.com/25-minute-garlic-mashed-potatoes
 func (x *Scraper) jsonAppend(recipe *RecipeObject, list []string) {
-	for _, text := range list{
+	for _, text := range list {
 		if text == "" {
 			continue
 		}
 		text = strings.TrimSpace(text)
-		recipe.RecipeIngredient =  append(recipe.RecipeIngredient, text)
+		recipe.RecipeIngredient = append(recipe.RecipeIngredient, text)
 	}
 }
 
@@ -134,15 +152,15 @@ type RecipeSchema4 struct {
 	ItemListOrder string `json:"itemListOrder"`
 }
 
-// jsonSchema4 parse json schema 4
+// schemaOrg_ItemListJSON parse json schema 4
 // https://www.yummly.com/recipe/Roasted-garlic-caesar-dipping-sauce-297499
-func (x *Scraper) jsonSchema4(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
+func (x *Scraper) schemaOrg_ItemListJSON(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
 	r := RecipeSchema4{}
 	err := json.Unmarshal(text, &r)
 	if err == nil {
 		for _, entry := range r.ItemListElement {
 			if len(entry.RecipeIngredient) > 0 {
-				recipe.Type = JSON4RecipeType
+				recipe.Type = schemaOrg_ItemListJSONType
 				recipe.RecipeIngredient = entry.RecipeIngredient
 				return true
 			}
@@ -154,6 +172,7 @@ func (x *Scraper) jsonSchema4(siteUrl string, text []byte, recipe *RecipeObject)
 // jsonSchemaRemoveHTML parse json schema RemoveHTML
 // this parser assumes that there is HTML mixed in with the JSON
 // It tries to remove all of the mixed in HTML then reprocess the JSON
+// https://mealpreponfleek.com/low-carb-hamburger-helper/
 func (x *Scraper) jsonSchemaRemoveHTML(siteUrl string, body []byte, recipe *RecipeObject) (ok bool) {
 	textOut := make([]string, 0)
 	// is this a schema.org JSON string
@@ -185,13 +204,17 @@ func (x *Scraper) jsonSchemaRemoveHTML(siteUrl string, body []byte, recipe *Reci
 	text := []byte(strings.Join(textOut, " "))
 	log.Info(string(text))
 	switch {
-	case x.jsonSchema1(siteUrl, text, recipe):
+	case x.schemaOrg_RecipeJSON(siteUrl, text, recipe):
+		recipe.Type += "+repaired"
 		return true
-	case x.jsonSchema2(siteUrl, text, recipe):
+	case x.graph_schemaOrgJSON(siteUrl, text, recipe):
+		recipe.Type += "+repaired"
 		return true
-	case x.jsonSchema3(siteUrl, text, recipe):
+	case x.schemaOrg_List(siteUrl, text, recipe):
+		recipe.Type += "+repaired"
 		return true
-	case x.jsonSchema4(siteUrl, text, recipe):
+	case x.schemaOrg_ItemListJSON(siteUrl, text, recipe):
+		recipe.Type += "+repaired"
 		return true
 	}
 	log.Error(siteUrl, "body contains schema.org/recipeIngredient json but did not parse")
