@@ -10,17 +10,18 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"scraper/internal/recipeclient"
 
+	log "github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/semaphore"
-	log "github.com/sirupsen/logrus"
-
 )
 
 func TestRecipeClient_GetRecipe(t *testing.T) {
@@ -79,18 +80,52 @@ func TestSiteClient_SiteGetRecipe(t *testing.T) {
 	require.Nil(t, err)
 	defer f.Close()
 	wg := sync.WaitGroup{}
+	httpSummary := make(map[int]int)
+	typeSummary := make(map[string]int)
+
+	wg.Add(1)
 	go func() {
-		for recipe := range siteClient.ReplyChan {
-			wg.Done()
-			switch recipe.StatusCode {
-			case http.StatusOK:
-				b, err := JSONMarshal(recipe)
-				if err == nil {
-					log.Println("Found", recipe.SiteURL)
-					log.Println(string(b))
+		activity := false
+		ticker := time.NewTicker(time.Minute)
+		for {
+			select {
+			case <-ticker.C:
+				if !activity {
+					wg.Done()
+					return
 				}
-			default:
-				log.Println(recipe.StatusCode, recipe.SiteURL, recipe.Error)
+				activity = false
+			case recipe := <-siteClient.ReplyChan:
+				// count by HTTP code
+				activity = true
+				if _, ok := httpSummary[recipe.StatusCode]; !ok {
+					httpSummary[recipe.StatusCode] = 0
+				}
+				httpSummary[recipe.StatusCode]++
+
+				// count by parser type
+				if recipe.Scraper != nil {
+					parser := strings.Join(recipe.Scraper ,",")
+					if len(recipe.Attributes) > 0 {
+						parser += ": "
+						parser += strings.Join(recipe.Attributes ,",")
+					}
+					if _, ok := typeSummary[parser]; !ok {
+						typeSummary[parser] = 0
+					}
+					typeSummary[parser]++
+				}
+
+				switch recipe.StatusCode {
+				case http.StatusOK:
+					b, err := JSONMarshal(recipe)
+					if err == nil {
+						log.Println(recipe.StatusCode, recipe.SiteURL)
+						fmt.Println(string(b))
+					}
+				default:
+					log.Println(recipe.StatusCode, recipe.SiteURL, recipe.Error)
+				}
 			}
 		}
 	}()
@@ -98,11 +133,41 @@ func TestSiteClient_SiteGetRecipe(t *testing.T) {
 	for sc.Scan() {
 		siteURL := sc.Text() // GET the line string
 		siteURL = strings.TrimRight(siteURL, "\n")
-		wg.Add(1)
+		if siteURL == "" {
+			continue
+		}
 		err := siteClient.SiteGetRecipe(siteURL)
 		if err != nil {
 			log.Println("URL Error", siteURL, err)
 		}
 	}
 	wg.Wait()
+	type sortHttp struct {
+		code  int
+		count int
+	}
+	httpList := make([]sortHttp, 0)
+	for k, v := range httpSummary {
+		httpList = append(httpList, sortHttp{k, v})
+	}
+	sort.Slice(httpList, func(i, j int) bool { return httpList[i].count > httpList[j].count })
+	fmt.Println("HTTP Summary")
+	for _, h := range httpList {
+		fmt.Printf("Count:%6d, HTTP: %d, %s\n", h.count, h.code, http.StatusText(h.code))
+	}
+
+	type sortType struct {
+		parserType string
+		count      int
+	}
+	typeList := make([]sortType, 0)
+	for k, v := range typeSummary {
+		typeList = append(typeList, sortType{k, v})
+	}
+	sort.Slice(typeList, func(i, j int) bool { return typeList[i].count > typeList[j].count })
+	fmt.Println("")
+	fmt.Println("Parser Summary")
+	for _, t := range typeList {
+		fmt.Printf("Count:%6d, Parser: %s\n", t.count, t.parserType)
+	}
 }

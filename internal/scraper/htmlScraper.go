@@ -56,7 +56,7 @@ func (x *Scraper) html1Scraper(siteUrl string, body []byte, recipe *RecipeObject
 		switch tokenType {
 		case html.ErrorToken:
 			if len(ingredients) > 0 {
-				recipe.Type = HTML1RecipeType
+				recipe.Scraper = append(recipe.Scraper,"<li></li>")
 				recipe.RecipeIngredient = ingredients
 				return true
 			}
@@ -105,30 +105,12 @@ func (x *Scraper) html1Scraper(siteUrl string, body []byte, recipe *RecipeObject
 }
 
 /*
-<div class="wprm-recipe-ingredient-group">
-<ul class="wprm-recipe-ingredients">
-<li class="wprm-recipe-ingredient" style="list-style-type: disc;">
-<span class="wprm-recipe-ingredient-amount">
-1 1/4 </span>
-<span class="wprm-recipe-ingredient-unit"> cups</span>
-<span class="wprm-recipe-ingredient-name"> ground almonds  (not almond flour)</span>
-<span class="wprm-recipe-ingredient-notes wprm-recipe-ingredient-notes-faded"> (130 grams)</span>
-</li>
-<li class="wprm-recipe-ingredient" style="list-style-type: disc;">
-<span class="wprm-recipe-ingredient-amount"> 1/4</span>
-<span class="wprm-recipe-ingredient-unit"> cup</span>
-<span class="wprm-recipe-ingredient-name"> + 2 1/2 tablespoons granulated sugar</span>
-<span class="wprm-recipe-ingredient-notes wprm-recipe-ingredient-notes-faded"> (81 grams)</span>
-</li> <li class="wprm-recipe-ingredient" style="list-style-type: disc;">
-<span class="wprm-recipe-ingredient-amount"> 1</span>
-<span class="wprm-recipe-ingredient-unit"> large</span>
-<span class="wprm-recipe-ingredient-name"> egg white (room temperature)</span>
-</li> <li class="wprm-recipe-ingredient" style="list-style-type: disc;">
-<span class="wprm-recipe-ingredient-amount"> 1/2</span>
-<span class="wprm-recipe-ingredient-unit"> teaspoon</span>
-<span class="wprm-recipe-ingredient-name"> almond or vanilla extract</span>
-</li> </ul>
-</div>
+  <li class="wprm-recipe-ingredient" style="list-style-type: disc;">
+          <span class="wprm-recipe-ingredient-amount">2</span>
+          <span class="wprm-recipe-ingredient-unit">tbsp</span>
+          <span class="wprm-recipe-ingredient-name">butter</span>
+          <span class="wprm-recipe-ingredient-notes wprm-recipe-ingredient-notes-faded">softened</span>
+  </li>
 */
 func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
 	type tokenActions struct {
@@ -158,7 +140,7 @@ func (x *Scraper) html2Scraper(siteUrl string, body []byte, recipe *RecipeObject
 		switch tokenType {
 		case html.ErrorToken:
 			if len(ingredients) > 0 {
-				recipe.Type = HTML2RecipeType
+				recipe.Scraper = append(recipe.Scraper,"<scan></scan>")
 				recipe.RecipeIngredient = ingredients
 				return true
 			}
@@ -220,7 +202,7 @@ func (x *Scraper) html3Scraper(siteUrl string, body []byte, recipe *RecipeObject
 		switch tokenType {
 		case html.ErrorToken:
 			if len(ingredients) > 0 {
-				recipe.Type = HTML3RecipeType
+				recipe.Scraper = append(recipe.Scraper,"<div></div>")
 				recipe.RecipeIngredient = ingredients
 				return true
 			}
@@ -284,12 +266,8 @@ sliced avocado					</li>
 diced cucumber					</li>
 </ul>
 <div class="chicory-noprint" data-position="within">
-<div class="chicory-default-button-container " style="
-display:inline-block !important;
-position:relative !important;
-margin-bottom: 18px !important;
-margin-top: 9px !important;
-">
+<div class="chicory-default-button-container " style=" display:inline-block !important; position:relative !important;
+margin-bottom: 18px !important; margin-top: 9px !important;">
 */
 func (x *Scraper) html4Scraper(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
 	textIsIngredient := false
@@ -300,7 +278,7 @@ func (x *Scraper) html4Scraper(siteUrl string, body []byte, recipe *RecipeObject
 		switch tokenType {
 		case html.ErrorToken:
 			if len(ingredients) > 0 {
-				recipe.Type = HTML4RecipeType
+				recipe.Scraper = append(recipe.Scraper,"<div><li></li></div>")
 				recipe.RecipeIngredient = ingredients
 				return true
 			}

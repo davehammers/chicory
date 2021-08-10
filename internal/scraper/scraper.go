@@ -6,47 +6,45 @@ import (
 	"net/http"
 )
 
-type RecipeParseType string
-
 const (
-	SchemaOrgRecipeType        RecipeParseType = "SchemaOrgRecipeType"
-	graph_schemaOrgJSONType    RecipeParseType = "embeddedGraphSchemaOrgJSONType"
-	schemaOrg_ListType         RecipeParseType = "schemaOrg_ListType"
-	schemaOrg_ItemListJSONType RecipeParseType = "schemaOrgItemListJSONType"
+	SchemaOrgRecipeType        = "SchemaOrgRecipeType"
+	graph_schemaOrgJSONType    = "GraphEmbeddedSchemaOrgJSONType"
+	schemaOrg_ListType         = "schemaOrg_ListType"
+	schemaOrg_ItemListJSONType = "schemaOrgItemListJSONType"
 
-	HTML1RecipeType RecipeParseType = "HTML1"
-	HTML2RecipeType RecipeParseType = "HTML2"
-	HTML3RecipeType RecipeParseType = "HTML3"
-	HTML4RecipeType RecipeParseType = "HTML4"
-	HTML5RecipeType RecipeParseType = "HTML5"
+	HTML1RecipeType = "<li></li>"
+	HTML2RecipeType = "<scan></scan>"
+	HTML3RecipeType = "HTML3"
+	HTML4RecipeType = "HTML4"
+	HTML5RecipeType = "HTML5"
 )
 
 type RecipeObject struct {
-	SiteURL          string
-	StatusCode       int
-	Error            string
-	Type             RecipeParseType `json:"type"`
-	RecipeIngredient []string        `json:"recipeIngredient"`
+	SiteURL          string   `json:"url"`
+	StatusCode       int      `json:"statusCode"`
+	Error            string   `json:"error"`
+	Scraper           []string `json:"scraper"`
+	Attributes           []string `json:"attributes"`
+	RecipeIngredient []string `json:"recipeIngredient"`
 }
 
 // ScrapeRecipe scrapes recipe from body returns RecipeObject, found = true if found
-func (x *Scraper) ScrapeRecipe(siteUrl string, body []byte) (recipe *RecipeObject, found bool) {
+func (x *Scraper) ScrapeRecipe(siteURL string, body []byte) (recipe *RecipeObject, found bool) {
 	//os.WriteFile("dump.html", body, 0666)
 	recipe = &RecipeObject{
-		SiteURL: siteUrl,
+		SiteURL:    siteURL,
 		StatusCode: http.StatusOK,
-		Error: "",
+		Error:      "",
 	}
-	switch {
-	case x.jsonParser(siteUrl, body, recipe):
+	jsonFound := x.jsonParser(siteURL, body, recipe)
+	httpFound := x.htmlParser(siteURL, body, recipe)
+	if jsonFound || httpFound {
 		found = true
-	case x.htmlParser(siteUrl, body, recipe):
-		found = true
-	default:
-		recipe.StatusCode = http.StatusNotImplemented
-		recipe.Error = "No Parser match"
-		found = false
 		return
 	}
+	recipe.SiteURL = siteURL
+	recipe.StatusCode = http.StatusNotImplemented
+	recipe.Error = "No Parser match"
+	found = false
 	return
 }
