@@ -4,6 +4,7 @@ package scraper
 
 import (
 	"net/http"
+	"strings"
 )
 
 const (
@@ -37,9 +38,19 @@ func (x *Scraper) ScrapeRecipe(siteURL string, body []byte) (recipe *RecipeObjec
 		Error:      "",
 	}
 	jsonFound := x.jsonParser(siteURL, body, recipe)
-	httpFound := x.htmlParser(siteURL, body, recipe)
+	htmlRecipe := &RecipeObject{
+		SiteURL:    siteURL,
+		StatusCode: http.StatusOK,
+		Error:      "",
+	}
+	httpFound := x.htmlParser(siteURL, body, htmlRecipe)
 	if jsonFound || httpFound {
 		found = true
+		recipe.Scraper = append(recipe.Scraper, htmlRecipe.Scraper...)
+		if len(recipe.RecipeIngredient) == 0 {
+			recipe.RecipeIngredient = htmlRecipe.RecipeIngredient
+		}
+
 		return
 	}
 	recipe.SiteURL = siteURL
@@ -47,4 +58,27 @@ func (x *Scraper) ScrapeRecipe(siteURL string, body []byte) (recipe *RecipeObjec
 	recipe.Error = "No Parser match"
 	found = false
 	return
+}
+
+// appendLine -  clean up a recipe line before adding it to the list
+func (x *Scraper) appendLine(recipe *RecipeObject, item interface{}) {
+	switch i := item.(type) {
+	case string:
+		x.appendString(recipe, i)
+	case []string:
+		for _, text := range i {
+			x.appendString(recipe, text)
+		}
+	}
+	return
+}
+func (x *Scraper) appendString(recipe *RecipeObject, text string) {
+	text = strings.ReplaceAll(text, "\n", "")
+	text = strings.ReplaceAll(text, "\t", " ")
+	text = strings.ReplaceAll(text, "<p>", "")
+	text = strings.ReplaceAll(text, "</p>", "")
+	text = strings.TrimSpace(text)
+	if text != "" {
+		recipe.RecipeIngredient = append(recipe.RecipeIngredient, text)
+	}
 }

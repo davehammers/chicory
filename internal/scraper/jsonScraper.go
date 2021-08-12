@@ -4,10 +4,10 @@ package scraper
 
 import (
 	"bytes"
-	"encoding/json"
+	"strings"
+
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
-	"strings"
 )
 
 const (
@@ -61,114 +61,6 @@ func (x *Scraper) jsonParser(siteUrl string, body []byte, recipe *RecipeObject) 
 				return true
 			default:
 				continue
-			}
-		}
-	}
-	return false
-}
-
-// flat schema.org recipe
-type RecipeSchema1 struct {
-	RecipeIngredient []string `json:"recipeIngredient"`
-}
-
-// schemaOrg_RecipeJSON parse json schema 1
-// http://30pepperstreet.com/recipe/endive-salad/
-func (x *Scraper) schemaOrg_RecipeJSON(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
-	r := RecipeSchema1{}
-	err := json.Unmarshal(text, &r)
-	if err == nil {
-		if len(r.RecipeIngredient) > 0 {
-			recipe.Scraper = append(recipe.Scraper, "schemaOrgRecipe")
-			x.jsonAppend(recipe, r.RecipeIngredient)
-			return true
-		}
-	}
-	return false
-}
-
-// nexted in Graph data
-type RecipeSchema2 struct {
-	Context string `json:"@context"`
-	Graph   []struct {
-		RecipeIngredient []string `json:"recipeIngredient,omitempty"`
-	} `json:"@graph"`
-}
-
-// graph_schemaOrgJSON parse json schema 2
-// http://ahealthylifeforme.com/25-minute-garlic-mashed-potatoes
-func (x *Scraper) graph_schemaOrgJSON(siteURL string, text []byte, recipe *RecipeObject) (ok bool) {
-	r := RecipeSchema2{}
-	err := json.Unmarshal(text, &r)
-	if err == nil {
-		for _, entry := range r.Graph {
-			if len(entry.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "@graph-schemaOrgRecipe")
-				x.jsonAppend(recipe, entry.RecipeIngredient)
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// top level list
-type RecipeSchema3 []struct {
-	Context          string   `json:"@context"`
-	Type             string   `json:"@type"`
-	RecipeIngredient []string `json:"recipeIngredient,omitempty"`
-}
-
-// schemaOrg_List parse json schema 3
-// http://allrecipes.com/recipe/12646/cheese-and-garden-vegetable-pie/
-func (x *Scraper) schemaOrg_List(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
-	r := RecipeSchema3{}
-	err := json.Unmarshal(text, &r)
-	if err == nil {
-		for _, entry := range r {
-			if len(entry.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "list schemaOrg")
-				x.jsonAppend(recipe, entry.RecipeIngredient)
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// schemaOrg_List parse json schema 3
-// http://ahealthylifeforme.com/25-minute-garlic-mashed-potatoes
-func (x *Scraper) jsonAppend(recipe *RecipeObject, list []string) {
-	for _, text := range list {
-		if text == "" {
-			continue
-		}
-		text = strings.TrimSpace(text)
-		recipe.RecipeIngredient = append(recipe.RecipeIngredient, text)
-	}
-}
-
-type RecipeSchema4 struct {
-	Context         string `json:"@context"`
-	Type            string `json:"@type"`
-	ItemListElement []struct {
-		RecipeIngredient []string `json:"recipeIngredient"`
-	} `json:"itemListElement"`
-	NumberOfItems int    `json:"numberOfItems"`
-	ItemListOrder string `json:"itemListOrder"`
-}
-
-// schemaOrg_ItemListJSON parse json schema 4
-// https://www.yummly.com/recipe/Roasted-garlic-caesar-dipping-sauce-297499
-func (x *Scraper) schemaOrg_ItemListJSON(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
-	r := RecipeSchema4{}
-	err := json.Unmarshal(text, &r)
-	if err == nil {
-		for _, entry := range r.ItemListElement {
-			if len(entry.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "schemaOrgItemList")
-				recipe.RecipeIngredient = entry.RecipeIngredient
-				return true
 			}
 		}
 	}
