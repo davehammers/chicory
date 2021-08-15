@@ -5,13 +5,14 @@ package recipeclient
 import (
 	"context"
 	"fmt"
-	log "github.com/sirupsen/logrus"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"scraper/internal/scraper"
 
@@ -28,19 +29,19 @@ type perSite struct {
 	requestCount          int
 	transportErrorCount   int
 	transportErrorMessage string
-	parent                *siteClient
+	parent                *SiteClient
 }
 
-type siteClient struct {
+type SiteClient struct {
 	ReplyChan   chan *scraper.RecipeObject
 	perSiteLock *sync.RWMutex
 	site        map[string]*perSite
 	scrape      *scraper.Scraper
 	maxWorkers  *semaphore.Weighted
-	client      *http.Client
+	Client      *http.Client
 }
 
-func NewSiteClient() *siteClient {
+func NewSiteClient() *SiteClient {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.MaxIdleConns = 500
 	tr.IdleConnTimeout = 30 * time.Second
@@ -50,17 +51,17 @@ func NewSiteClient() *siteClient {
 	tr.DisableKeepAlives = true
 	tr.TLSHandshakeTimeout = 700 * time.Millisecond
 	tr.TLSClientConfig.InsecureSkipVerify = true
-	return &siteClient{
+	return &SiteClient{
 		ReplyChan:   make(chan *scraper.RecipeObject),
 		perSiteLock: &sync.RWMutex{},
 		site:        make(map[string]*perSite),
 		scrape:      &scraper.Scraper{},
-		maxWorkers:  semaphore.NewWeighted(100),
-		client:      &http.Client{Transport: tr, Timeout: time.Second * 30},
+		maxWorkers:  semaphore.NewWeighted(1000),
+		Client:      &http.Client{Transport: tr, Timeout: time.Second * 30},
 	}
 }
 
-func (x *siteClient) newSite(siteURL string) *perSite {
+func (x *SiteClient) newSite(siteURL string) *perSite {
 	out := &perSite{
 		siteURL:  siteURL,
 		ctx:      context.Background(),
@@ -75,7 +76,7 @@ func (x *siteClient) newSite(siteURL string) *perSite {
 }
 
 // GetRecipe - extract any recipes from the URL site provided. returns interface
-func (x *siteClient) SiteGetRecipe(siteURL string) (err error) {
+func (x *SiteClient) SiteGetRecipe(siteURL string) (err error) {
 	u, err := url.Parse(siteURL)
 	if err != nil {
 		fmt.Println("host", err)
@@ -136,9 +137,9 @@ func (x *perSite) queueHandler() {
 		go func(x *perSite) {
 			var resp *http.Response
 			var err error
-			x.parent.maxWorkers.Acquire(x.ctx, 1)
-			resp, err = x.parent.client.Get(siteURL)
-			x.parent.maxWorkers.Release(1)
+			//x.parent.maxWorkers.Acquire(x.ctx, 1)
+			resp, err = x.parent.Client.Get(siteURL)
+			//x.parent.maxWorkers.Release(1)
 
 			switch err {
 			case nil:

@@ -3,6 +3,7 @@ package scraper
 // contains definitions and functions for accessing and parsing recipes from URLs
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 )
@@ -54,8 +55,12 @@ func (x *Scraper) ScrapeRecipe(siteURL string, body []byte) (recipe *RecipeObjec
 		return
 	}
 	recipe.SiteURL = siteURL
-	recipe.StatusCode = http.StatusNotImplemented
-	recipe.Error = "No Parser match"
+	if recipe.StatusCode == http.StatusOK {
+		recipe.Scraper = append(recipe.Scraper, "No Scraper Found")
+	} else {
+		recipe.Scraper = append(recipe.Scraper, fmt.Sprintf("HTTP %d", recipe.StatusCode))
+	}
+	recipe.Error = "No Scraper match"
 	found = false
 	return
 }
