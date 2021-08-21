@@ -4,6 +4,7 @@ package scraper
 
 import (
 	"context"
+	"regexp"
 	"sync"
 
 	"github.com/dgraph-io/ristretto"
@@ -17,6 +18,8 @@ type Scraper struct {
 	badDomainLock *sync.RWMutex
 	ctx           context.Context
 	maxWorkers    *semaphore.Weighted
+	LineRegEx     *regexp.Regexp
+	AngleRegEx *regexp.Regexp
 }
 
 // NewClient - allocate a *Scraper
@@ -28,6 +31,12 @@ func New() *Scraper {
 		maxWorkers:    semaphore.NewWeighted(1000),
 		badDomainMap:  make(map[string]int),
 		badDomainLock: &sync.RWMutex{},
+		LineRegEx: regexp.MustCompile("&.*?;"),
+		AngleRegEx: regexp.MustCompile("<.*?>"),
+	}
+	if err != nil {
+		log.Fatal(err)
+		return &c
 	}
 	cacheCfg := ristretto.Config{
 		NumCounters: 1e7,     // number of keys to track frequency of (10M).

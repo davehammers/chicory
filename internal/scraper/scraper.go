@@ -4,6 +4,7 @@ package scraper
 
 import (
 	"fmt"
+	"golang.org/x/net/html"
 	"net/http"
 	"strings"
 )
@@ -80,9 +81,12 @@ func (x *Scraper) appendLine(recipe *RecipeObject, item interface{}) {
 func (x *Scraper) appendString(recipe *RecipeObject, text string) {
 	text = strings.ReplaceAll(text, "\n", "")
 	text = strings.ReplaceAll(text, "\t", " ")
-	text = strings.ReplaceAll(text, "<p>", "")
-	text = strings.ReplaceAll(text, "</p>", "")
+	text = strings.ReplaceAll(text, "  ", " ")
+	//text = x.LineRegEx.ReplaceAllLiteralString(text, " ")
+	text = html.UnescapeString(text)
+	text = x.AngleRegEx.ReplaceAllLiteralString(text, "")
 	text = strings.TrimSpace(text)
+	text = strings.Join(strings.Fields(text), " ")
 	if text != "" {
 		recipe.RecipeIngredient = append(recipe.RecipeIngredient, text)
 	}

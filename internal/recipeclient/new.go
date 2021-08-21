@@ -6,16 +6,16 @@ import (
 	"context"
 	"github.com/dgraph-io/ristretto"
 	log "github.com/sirupsen/logrus"
-	"github.com/valyala/fasthttp"
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/time/rate"
+	"net/http"
 	"scraper/internal/scraper"
 	"sync"
 	"time"
 )
 
 type RecipeClient struct {
-	client *fasthttp.Client
+	client *http.Client
 	cache  *ristretto.Cache
 	domainRateMap map[string]*rate.Limiter
 	domainRateLock *sync.RWMutex
@@ -33,15 +33,21 @@ func New() *RecipeClient {
 		maxWorkers: semaphore.NewWeighted(5000),
 		domainRateMap: make(map[string]*rate.Limiter),
 		domainRateLock: &sync.RWMutex{},
-		scrape: &scraper.Scraper{},
+		scrape: scraper.New(),
 	}
-	c.client = &fasthttp.Client{
-		Name: "chicory-scraper",
-		MaxConnsPerHost: 100,
-		//MaxConnDuration: time.Second * 60,
-		ReadBufferSize: 8*1024,
-		ReadTimeout: time.Second * 60,
-	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.MaxIdleConns = 500
+	tr.IdleConnTimeout = 30 * time.Second
+	tr.MaxConnsPerHost = 2
+	tr.MaxIdleConnsPerHost = 2
+	tr.ResponseHeaderTimeout = 60 * time.Second
+	tr.DisableKeepAlives = true
+	tr.TLSClientConfig.InsecureSkipVerify = true
+	// We use ABSURDLY large keys, and should probably not.
+	tr.TLSHandshakeTimeout = 45 * time.Second
+	tr.DisableCompression = false
+
+	c.client = &http.Client{Transport: tr, Timeout: time.Second * 60}
 	cacheCfg := ristretto.Config{
 		NumCounters: 1e7,     // number of keys to track frequency of (10M).
 		MaxCost:     1 << 30, // maximum cost of cache (1GB).

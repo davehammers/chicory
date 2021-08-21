@@ -16,6 +16,7 @@ func (x *Scraper) htmlParser(siteUrl string, body []byte, recipe *RecipeObject) 
 	case x.htmlCustomDivDiv(siteUrl, body, recipe):
 	case x.htmlCustomLiLi(siteUrl, body, recipe):
 	case x.htmlCustomScanScan(siteUrl, body, recipe):
+	case x.htmlCustomLabelLabel(siteUrl, body, recipe):
 	case x.htmlCustomDivLiLiDiv(siteUrl, body, recipe):
 	default:
 		return false

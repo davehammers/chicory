@@ -5,8 +5,9 @@ package recipeclient
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
-	"github.com/valyala/fasthttp"
 	"golang.org/x/time/rate"
+	"io/ioutil"
+	"net/http"
 	"net/url"
 	"scraper/internal/scraper"
 	"time"
@@ -36,6 +37,7 @@ func (x TimeOutError) Error() string {
 
 // GetRecipe - extract any recipes from the URL site provided. returns interface
 func (x *RecipeClient) GetRecipe(siteUrl string) (recipe *scraper.RecipeObject, err error) {
+	var body []byte
 	// first, look for cached recipe
 	if r, ok := x.scrape.CachedRecipe(siteUrl); ok {
 		recipe = &r
@@ -45,24 +47,28 @@ func (x *RecipeClient) GetRecipe(siteUrl string) (recipe *scraper.RecipeObject, 
 	x.waitForDomain(siteUrl)
 
 	// limit the number of concurrent transactions to avoid overloading the network
+	req, err := http.NewRequest(http.MethodGet, siteUrl, nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("User-Agent","Onetsp-RecipeParser/0.1 (+https://github.com/onetsp/RecipeParser)" )
 	x.maxWorkers.Acquire(x.ctx, 1)
-	defer x.maxWorkers.Release(1)
+	resp, err := x.client.Do(req)
+	x.maxWorkers.Release(1)
 
 	// Continue by getting recipe web page
-	// format a GET request
 
-	dst := make([]byte,128*1024)
-	statusCode, body, err := x.client.GetTimeout(dst, siteUrl, time.Second * 60)
-
-	//req := fasthttp.AcquireRequest()
-	//resp := fasthttp.AcquireResponse()
-	//req.SetRequestURI(siteUrl)
-	//err = x.client.DoTimeout(req, resp, time.Second * 60)
 	switch err {
 	case nil:
+		body, err = ioutil.ReadAll(resp.Body)
+		if err != nil {
+			err = NotFoundError{"No data returned"}
+			return
+		}
+		resp.Body.Close()
 		// successfully communicated with a domain name
-		switch statusCode {
-		case fasthttp.StatusOK:
+		switch resp.StatusCode {
+		case http.StatusOK:
 			found := false
 			recipe, found = x.scrape.ScrapeRecipe(siteUrl, body)
 			if !found {
@@ -71,7 +77,7 @@ func (x *RecipeClient) GetRecipe(siteUrl string) (recipe *scraper.RecipeObject, 
 			}
 			err = nil
 		default:
-			err = fmt.Errorf("HTTP status code %d", statusCode)
+			err = fmt.Errorf("HTTP status code %d", resp.StatusCode)
 			return
 		}
 	}

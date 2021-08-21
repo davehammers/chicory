@@ -8,7 +8,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"strings"
 	"sync"
 	"time"
 
@@ -20,12 +19,18 @@ import (
 	"golang.org/x/time/rate"
 )
 
+const (
+	defaultConcurrentPerSite = .1
+	defaultMaxWorkers        = 100
+)
+
 type perSite struct {
 	siteURL               string
 	ctx                   context.Context
+	limit rate.Limit
 	limiter               *rate.Limiter
 	queueSem              *sync.Cond
-	queue                 []string // queue URLs to be processed for this site
+	queue                 chan string
 	requestCount          int
 	transportErrorCount   int
 	transportErrorMessage string
@@ -47,17 +52,20 @@ func NewSiteClient() *SiteClient {
 	tr.IdleConnTimeout = 30 * time.Second
 	tr.MaxConnsPerHost = 2
 	tr.MaxIdleConnsPerHost = 2
-	tr.ResponseHeaderTimeout = 45 * time.Second
+	tr.ResponseHeaderTimeout = 60 * time.Second
 	tr.DisableKeepAlives = true
-	tr.TLSHandshakeTimeout = 700 * time.Millisecond
 	tr.TLSClientConfig.InsecureSkipVerify = true
+	// We use ABSURDLY large keys, and should probably not.
+	tr.TLSHandshakeTimeout = 45 * time.Second
+	tr.DisableCompression = false
+
 	return &SiteClient{
 		ReplyChan:   make(chan *scraper.RecipeObject),
 		perSiteLock: &sync.RWMutex{},
 		site:        make(map[string]*perSite),
-		scrape:      &scraper.Scraper{},
-		maxWorkers:  semaphore.NewWeighted(1000),
-		Client:      &http.Client{Transport: tr, Timeout: time.Second * 30},
+		scrape:      scraper.New(),
+		maxWorkers:  semaphore.NewWeighted(defaultMaxWorkers),
+		Client:      &http.Client{Transport: tr, Timeout: time.Second * 60},
 	}
 }
 
@@ -65,8 +73,9 @@ func (x *SiteClient) newSite(siteURL string) *perSite {
 	out := &perSite{
 		siteURL:  siteURL,
 		ctx:      context.Background(),
-		limiter:  rate.NewLimiter(rate.Limit(10), 1),
-		queue:    make([]string, 0),
+		limit: rate.Limit(defaultConcurrentPerSite),
+		limiter:  rate.NewLimiter(rate.Limit(defaultConcurrentPerSite), 1),
+		queue:    make(chan string, 1000),
 		queueSem: sync.NewCond(&sync.RWMutex{}),
 		parent:   x,
 	}
@@ -89,21 +98,14 @@ func (x *SiteClient) SiteGetRecipe(siteURL string) (err error) {
 		x.site[u.Host] = site
 		x.perSiteLock.Unlock()
 	}
-	site.queue = append(site.queue, siteURL)
-	//site.queueSem.Signal()
+	go func(siteURL string) {
+		site.queue <- siteURL
+	}(siteURL)
 	return
 }
 
 func (x *perSite) queueHandler() {
-	for {
-		// pull URL off the queue
-		if len(x.queue) == 0 {
-			// TODO sync with sender
-			time.Sleep(time.Second)
-			continue
-		}
-		siteURL := x.queue[0]
-		x.queue = x.queue[1:]
+	for siteURL := range x.queue {
 		x.requestCount++
 		// is URL parsable
 		if _, err := url.Parse(siteURL); err != nil {
@@ -134,55 +136,77 @@ func (x *perSite) queueHandler() {
 			log.Warn(err)
 		}
 
-		go func(x *perSite) {
+		go func(x *perSite, siteURL string) {
 			var resp *http.Response
 			var err error
-			//x.parent.maxWorkers.Acquire(x.ctx, 1)
-			resp, err = x.parent.Client.Get(siteURL)
-			//x.parent.maxWorkers.Release(1)
+			for retry := 0; retry < 2; retry++ {
+				x.parent.maxWorkers.Acquire(x.ctx, 1)
+				resp, err = x.parent.Client.Get(siteURL)
+				x.parent.maxWorkers.Release(1)
 
-			switch err {
-			case nil:
-				// successfully communicated with a domain name
-				body, err := ioutil.ReadAll(resp.Body)
-				resp.Body.Close()
-				if err != nil {
-					resp.StatusCode = http.StatusInternalServerError
-				} else if len(body) == 0 {
-					resp.StatusCode = http.StatusLengthRequired
-					x.transportErrorCount++
-					x.transportErrorMessage = "Website closed connection before any data sent"
-				}
-				switch resp.StatusCode {
-				case http.StatusOK:
-					x.transportErrorCount = 0
-					x.transportErrorMessage = ""
-					recipe, _ := x.parent.scrape.ScrapeRecipe(siteURL, body)
-					x.parent.ReplyChan <- recipe
-				default:
-					recipe := &scraper.RecipeObject{
-						SiteURL:    siteURL,
-						StatusCode: resp.StatusCode,
-						Error:      "HTTP error",
+				switch err {
+				case nil:
+					// successfully communicated with a domain name
+					body, err := ioutil.ReadAll(resp.Body)
+					if err != nil {
+						resp.StatusCode = http.StatusInternalServerError
+						continue
 					}
-					x.parent.ReplyChan <- recipe
-					return
+					resp.Body.Close()
+
+					switch resp.StatusCode {
+					case http.StatusOK:
+						if len(body) == 0 {
+							resp.StatusCode = http.StatusLengthRequired
+							x.transportErrorCount++
+							x.transportErrorMessage = "Website closed connection before any data sent"
+							continue
+						}
+						x.transportErrorCount = 0
+						x.transportErrorMessage = ""
+						recipe, _ := x.parent.scrape.ScrapeRecipe(siteURL, body)
+						x.parent.ReplyChan <- recipe
+						if x.limit < 20.0 {
+							x.limit += .1
+							x.limiter.SetLimit(x.limit)
+						}
+						return
+					case http.StatusForbidden:
+						continue
+					case http.StatusLengthRequired:
+						continue
+					default:
+						if x.limit > .4 {
+							x.limit -= .1
+							x.limiter.SetLimit(x.limit)
+						}
+						recipe := &scraper.RecipeObject{
+							SiteURL:    siteURL,
+							StatusCode: resp.StatusCode,
+							Error:      "HTTP error",
+						}
+						x.parent.ReplyChan <- recipe
+						return
+					}
+				default:
+					// Transport failure
+					x.transportErrorCount++
+					x.transportErrorMessage = err.Error()
+					if resp == nil {
+						resp = &http.Response{}
+					}
+					resp.StatusCode = http.StatusServiceUnavailable
+					err = fmt.Errorf("HTTP code")
 				}
-			default:
-				// Transport failure
-				x.transportErrorCount++
-				x.transportErrorMessage = err.Error()
-				code := http.StatusServiceUnavailable
-				if strings.Contains(err.Error(), "time") {
-					code = http.StatusGatewayTimeout
-				}
-				recipe := &scraper.RecipeObject{
-					SiteURL:    siteURL,
-					StatusCode: code,
-					Error:      err.Error(),
-				}
-				x.parent.ReplyChan <- recipe
 			}
-		}(x)
+			recipe := &scraper.RecipeObject{
+				SiteURL:    siteURL,
+				StatusCode: resp.StatusCode,
+			}
+			if err != nil {
+				recipe.Error = err.Error()
+			}
+			x.parent.ReplyChan <- recipe
+		}(x, siteURL)
 	}
 }

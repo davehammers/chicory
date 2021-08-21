@@ -35,18 +35,17 @@ func (x *Scraper) htmlCustomScanScan(siteUrl string, body []byte, recipe *Recipe
 	// current action for text token
 	var textAction tokenActions
 
+	recipe.RecipeIngredient = nil
 	rawTag := ""
 	ingredientParts := ""
 	textIsIngredient := false
-	ingredients := make([]string, 0)
 	tokenizer := html.NewTokenizer(bytes.NewReader(body))
 	for {
 		tokenType := tokenizer.Next()
 		switch tokenType {
 		case html.ErrorToken:
-			if len(ingredients) > 0 {
+			if len(recipe.RecipeIngredient) > 0 {
 				recipe.Scraper = append(recipe.Scraper, "custom <scan></scan>")
-				recipe.RecipeIngredient = ingredients
 				return true
 			}
 			return false
@@ -73,17 +72,12 @@ func (x *Scraper) htmlCustomScanScan(siteUrl string, body []byte, recipe *Recipe
 		case html.TextToken:
 			if textIsIngredient {
 				text := string(tokenizer.Text())
-				text = strings.TrimRight(text, "\n ")
-				text = strings.TrimSpace(text)
-				if text == "" {
-					break
-				}
 				ingredientParts += text
 				if textAction.addSpace {
 					ingredientParts += " "
 				}
 				if textAction.end {
-					ingredients = append(ingredients, ingredientParts)
+					x.appendLine(recipe, ingredientParts)
 					ingredientParts = ""
 				}
 			}

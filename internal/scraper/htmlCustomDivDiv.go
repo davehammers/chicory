@@ -18,10 +18,15 @@ import (
 func (x *Scraper) htmlCustomDivDiv(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
 	recipe.RecipeIngredient = nil
 	textIsIngredient := false
+	divBlock := false
 	tokenizer := html.NewTokenizer(bytes.NewReader(body))
 	textParts := make([]string, 0)
+	spanCnt := 0
 	divWords := []string{
-		"ingredient-text",
+		`"ingredient"`,
+	}
+	spanWords := []string{
+		`"recipeIngredient"`,
 	}
 	for {
 		tokenType := tokenizer.Next()
@@ -39,25 +44,41 @@ func (x *Scraper) htmlCustomDivDiv(siteUrl string, body []byte, recipe *RecipeOb
 			case "div":
 				for _, word := range divWords {
 					if strings.Contains(raw, word) {
-						textIsIngredient = true
+						divBlock = true
 						break
 					}
 				}
+			case "span":
+				if !divBlock{
+					break
+				}
+				for _, word := range spanWords {
+					if strings.Contains(raw, word) {
+						textIsIngredient = true
+						spanCnt = 0
+						break
+					}
+				}
+				spanCnt++
 			}
 		case html.EndTagToken:
 			name, _ := tokenizer.TagName()
 			switch string(name) {
-			case "div":
+			case "span":
 				if textIsIngredient {
-					x.appendLine(recipe, strings.Join(textParts, ""))
-					textParts = nil
+					spanCnt--
+					if spanCnt == 0 {
+						x.appendLine(recipe, strings.Join(textParts, ""))
+						textParts = nil
+						textIsIngredient = false
+						divBlock = false
+					}
 				}
-				textIsIngredient = false
 			}
 		case html.TextToken:
 			text := string(tokenizer.Text())
 			if textIsIngredient {
-				x.appendLine(recipe, text)
+				textParts = append(textParts, text)
 			}
 		}
 	}
