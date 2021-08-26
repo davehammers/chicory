@@ -51,7 +51,10 @@ func (x *RecipeClient) GetRecipe(siteUrl string) (recipe *scraper.RecipeObject, 
 	if err != nil {
 		return
 	}
-	req.Header.Set("User-Agent","Onetsp-RecipeParser/0.1 (+https://github.com/onetsp/RecipeParser)" )
+	req.Header.Set("User-Agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36")
+	req.Header.Set("accept","text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
+	req.Header.Set("referer", siteUrl)
+
 	x.maxWorkers.Acquire(x.ctx, 1)
 	resp, err := x.client.Do(req)
 	x.maxWorkers.Release(1)

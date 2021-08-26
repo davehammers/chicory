@@ -40,6 +40,11 @@ func (x *Scraper) ScrapeRecipe(siteURL string, body []byte) (recipe *RecipeObjec
 		Error:      "",
 	}
 	jsonFound := x.jsonParser(siteURL, body, recipe)
+	if jsonFound{
+		found = true
+		return
+	}
+
 	htmlRecipe := &RecipeObject{
 		SiteURL:    siteURL,
 		StatusCode: http.StatusOK,

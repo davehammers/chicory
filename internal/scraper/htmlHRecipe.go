@@ -11,18 +11,18 @@ import (
 
 // htmlHRecipe - micro format
 func (x *Scraper) htmlHRecipe(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
-	recipe.RecipeIngredient	= nil
+	recipe.RecipeIngredient = nil
 
 	recipeBlock := false
 	textIsIngredient := false
 	tokenizer := html.NewTokenizer(bytes.NewReader(body))
-	textParts := make([]string,0)
+	textParts := make([]string, 0)
 	for {
 		tokenType := tokenizer.Next()
 		switch tokenType {
 		case html.ErrorToken:
 			if len(recipe.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "h-recipe")
+				recipe.Scraper = append(recipe.Scraper, "hrecipe")
 				return true
 			}
 			return false
@@ -31,13 +31,20 @@ func (x *Scraper) htmlHRecipe(siteUrl string, body []byte, recipe *RecipeObject)
 			raw := string(tokenizer.Raw())
 			switch string(name) {
 			case "article":
-				if strings.Contains(raw, "h-recipe") {
-					recipeBlock = true
+				for _, token := range []string{"h-recipe", "hrecipe"} {
+					if strings.Contains(raw, token) {
+						recipeBlock = true
+						break
+					}
 				}
 			case "li":
-				if recipeBlock && strings.Contains(raw, "p-ingredient") {
-					textParts = nil
-					textIsIngredient = true
+				if recipeBlock {
+					for _, token := range []string{"p-ingredient", `class="ingredient-item`} {
+						if strings.Contains(raw, token) {
+							textParts = nil
+							textIsIngredient = true
+						}
+					}
 				}
 			}
 		case html.EndTagToken:
