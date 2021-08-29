@@ -15,25 +15,19 @@ import (
 </div><div id="zlrecipe-ingredient-1" class="ingredient" itemprop="ingredients">1½ c. peanut butter
 </div><div id="zlrecipe-ingredient-2" class="ingredient" itemprop="ingredients">2 c. (12 oz) chocolate chips </div></span>
 */
-func (x *Scraper) htmlCustomDivDiv(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+func (x *Scraper) htmlCustomDivDiv(sourceURL string, body []byte, recipe *RecipeObject) (found bool) {
 	recipe.RecipeIngredient = nil
 	textIsIngredient := false
 	divBlock := false
 	tokenizer := html.NewTokenizer(bytes.NewReader(body))
 	textParts := make([]string, 0)
 	spanCnt := 0
-	divWords := []string{
-		`"ingredient"`,
-	}
-	spanWords := []string{
-		`"recipeIngredient"`,
-	}
 	for {
 		tokenType := tokenizer.Next()
 		switch tokenType {
 		case html.ErrorToken:
 			if len(recipe.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "custom <div></div>")
+				recipe.Scraper = "custom <div></div>"
 				return true
 			}
 			return false
@@ -42,7 +36,9 @@ func (x *Scraper) htmlCustomDivDiv(siteUrl string, body []byte, recipe *RecipeOb
 			raw := string(tokenizer.Raw())
 			switch string(name) {
 			case "div":
-				for _, word := range divWords {
+				for _, word := range []string{
+						`"ingredient"`,
+					} {
 					if strings.Contains(raw, word) {
 						divBlock = true
 						break
@@ -52,7 +48,9 @@ func (x *Scraper) htmlCustomDivDiv(siteUrl string, body []byte, recipe *RecipeOb
 				if !divBlock{
 					break
 				}
-				for _, word := range spanWords {
+				for _, word := range []string{
+						`"recipeIngredient"`,
+					}{
 					if strings.Contains(raw, word) {
 						textIsIngredient = true
 						spanCnt = 0

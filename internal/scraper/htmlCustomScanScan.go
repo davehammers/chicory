@@ -17,20 +17,11 @@ import (
           <span class="wprm-recipe-ingredient-notes wprm-recipe-ingredient-notes-faded">softened</span>
   </li>
 */
-func (x *Scraper) htmlCustomScanScan(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+func (x *Scraper) htmlCustomScanScan(sourceURL string, body []byte, recipe *RecipeObject) (found bool) {
 	type tokenActions struct {
+		keyWord string
 		addSpace bool
 		end      bool
-	}
-	tokenWords := map[string]tokenActions{
-		"recipeIngredient":                 {false, true},
-		`class="amount"`:                   {true, false},
-		`class="name"`:                     {false, true},
-		"wprm-recipe-ingredient-amount":    {true, false},
-		"wprm-recipe-ingredient-unit":      {true, false},
-		"wprm-recipe-ingredient-name":      {false, true},
-		"wpurp-recipe-ingredient-quantity": {true, false},
-		"wpurp-recipe-ingredient-name":     {false, true},
 	}
 	// current action for text token
 	var textAction tokenActions
@@ -45,17 +36,30 @@ func (x *Scraper) htmlCustomScanScan(siteUrl string, body []byte, recipe *Recipe
 		switch tokenType {
 		case html.ErrorToken:
 			if len(recipe.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "custom <scan></scan>")
+				recipe.Scraper = "custom <span></span>"
 				return true
 			}
 			return false
 		case html.StartTagToken:
 			name, _ := tokenizer.TagName()
-			rawTag = string(tokenizer.Raw())
 			switch string(name) {
 			case "span":
-				for k, v := range tokenWords {
-					if strings.Contains(rawTag, k) {
+				rawTag = string(tokenizer.Raw())
+				for _, v := range []tokenActions{
+					{"recipeingredient",                 false, true},
+					{"recipeIngredient",                 false, true},
+					{`class="amount"`,                   true, false},
+					{`class="name"`,                     false, true},
+
+					{"wprm-recipe-ingredient-amount",    true, false},
+					{"wprm-recipe-ingredient-unit",      true, false},
+					{"wprm-recipe-ingredient-name",      false, true},
+
+					{"wpurp-recipe-ingredient-quantity", true, false},
+					{"wpurp-recipe-ingredient-name",     false, true},
+					{`itemprop="ingredients"`,           false, true},
+				} {
+					if strings.Contains(rawTag, v.keyWord) {
 						textAction = v
 						textIsIngredient = true
 						break

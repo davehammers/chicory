@@ -18,13 +18,13 @@ type RecipeSchema4 struct {
 
 // schemaOrg_ItemListJSON parse json schema 4
 // https://www.yummly.com/recipe/Roasted-garlic-caesar-dipping-sauce-297499
-func (x *Scraper) schemaOrg_ItemListJSON(siteUrl string, text []byte, recipe *RecipeObject) (ok bool) {
+func (x *Scraper) schemaOrg_ItemListJSON(sourceURL string, text []byte, recipe *RecipeObject) (ok bool) {
 	r := RecipeSchema4{}
 	err := json.Unmarshal(text, &r)
 	if err == nil {
 		for _, entry := range r.ItemListElement {
 			if len(entry.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "JSON schemaOrg ItemList Recipe")
+				recipe.Scraper = "JSON schemaOrg ItemList Recipe"
 				x.appendLine(recipe,  entry.RecipeIngredient)
 				return true
 			}

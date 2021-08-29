@@ -3,6 +3,7 @@ package recipeclient
 // contains definitions and functions for accessing and parsing recipes from URLs
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -11,24 +12,26 @@ import (
 	"sync"
 	"time"
 
-	log "github.com/sirupsen/logrus"
-
 	"scraper/internal/scraper"
 
 	"golang.org/x/sync/semaphore"
 	"golang.org/x/time/rate"
+
+	"github.com/google/brotli/go/cbrotli"
 )
 
 const (
 	defaultConcurrentPerSite = .1
+	siteDefaultMaxWorkers = 4
 	defaultMaxWorkers        = 100
 )
 
 type perSite struct {
-	siteURL               string
+	sourceURL               string
 	ctx                   context.Context
 	limit rate.Limit
 	limiter               *rate.Limiter
+	maxWorkers  *semaphore.Weighted
 	queueSem              *sync.Cond
 	queue                 chan string
 	requestCount          int
@@ -69,12 +72,13 @@ func NewSiteClient() *SiteClient {
 	}
 }
 
-func (x *SiteClient) newSite(siteURL string) *perSite {
+func (x *SiteClient) newSite(sourceURL string) *perSite {
 	out := &perSite{
-		siteURL:  siteURL,
+		sourceURL:  sourceURL,
 		ctx:      context.Background(),
 		limit: rate.Limit(defaultConcurrentPerSite),
 		limiter:  rate.NewLimiter(rate.Limit(defaultConcurrentPerSite), 1),
+		maxWorkers:  semaphore.NewWeighted(siteDefaultMaxWorkers),
 		queue:    make(chan string, 1000),
 		queueSem: sync.NewCond(&sync.RWMutex{}),
 		parent:   x,
@@ -85,8 +89,8 @@ func (x *SiteClient) newSite(siteURL string) *perSite {
 }
 
 // GetRecipe - extract any recipes from the URL site provided. returns interface
-func (x *SiteClient) SiteGetRecipe(siteURL string) (err error) {
-	u, err := url.Parse(siteURL)
+func (x *SiteClient) SiteGetRecipe(sourceURL string) (err error) {
+	u, err := url.Parse(sourceURL)
 	if err != nil {
 		fmt.Println("host", err)
 		return
@@ -94,23 +98,23 @@ func (x *SiteClient) SiteGetRecipe(siteURL string) (err error) {
 	site, ok := x.site[u.Host]
 	if !ok {
 		x.perSiteLock.Lock()
-		site = x.newSite(siteURL)
+		site = x.newSite(sourceURL)
 		x.site[u.Host] = site
 		x.perSiteLock.Unlock()
 	}
-	go func(siteURL string) {
-		site.queue <- siteURL
-	}(siteURL)
+	go func(sourceURL string) {
+		site.queue <- sourceURL
+	}(sourceURL)
 	return
 }
 
 func (x *perSite) queueHandler() {
-	for siteURL := range x.queue {
+	for sourceURL := range x.queue {
 		x.requestCount++
 		// is URL parsable
-		if _, err := url.Parse(siteURL); err != nil {
+		if _, err := url.Parse(sourceURL); err != nil {
 			recipe := &scraper.RecipeObject{
-				SiteURL:    siteURL,
+				SourceURL:    sourceURL,
 				StatusCode: http.StatusBadRequest,
 				Error:      err.Error(),
 			}
@@ -123,7 +127,7 @@ func (x *perSite) queueHandler() {
 		//}
 		if x.transportErrorCount > 50 {
 			recipe := &scraper.RecipeObject{
-				SiteURL:    siteURL,
+				SourceURL:    sourceURL,
 				StatusCode: http.StatusServiceUnavailable,
 				Error:      x.transportErrorMessage,
 			}
@@ -131,22 +135,24 @@ func (x *perSite) queueHandler() {
 			continue
 		}
 
-		// rate limiter for the domain to avoid overloading website
-		if err := x.limiter.Wait(x.ctx); err != nil {
-			log.Warn(err)
-		}
+		// limit the number of concurrent transactions
+		x.maxWorkers.Acquire(x.ctx, 1)
 
-		go func(x *perSite, siteURL string) {
+		go func(x *perSite, sourceURL string) {
 			var resp *http.Response
 			var err error
+			defer x.maxWorkers.Release(1)
 			for retry := 0; retry < 2; retry++ {
-				req, err := http.NewRequest(http.MethodGet, siteURL, nil)
+				req, err := http.NewRequest(http.MethodGet, sourceURL, nil)
 				if err != nil {
 					return
 				}
 				req.Header.Set("User-Agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36")
 				req.Header.Set("accept","text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
-				req.Header.Set("referer", siteURL)
+				req.Header.Set("referer", sourceURL)
+				req.Header.Add("Accept-Encoding", "gzip")
+				req.Header.Add("Accept-Encoding", "br")
+
 
 				x.parent.maxWorkers.Acquire(x.ctx, 1)
 				resp, err = x.parent.Client.Do(req)
@@ -154,13 +160,32 @@ func (x *perSite) queueHandler() {
 
 				switch err {
 				case nil:
+					var body []byte
 					// successfully communicated with a domain name
-					body, err := ioutil.ReadAll(resp.Body)
+					defer resp.Body.Close()
+					switch resp.Header.Get("Content-Encoding") {
+					case "br":
+						// some web sites compress data even if not requested
+						reader := cbrotli.NewReader(resp.Body)
+						body, err = ioutil.ReadAll(reader)
+						reader.Close()
+					case "gzip":
+						// some web sites compress data even if not requested
+						reader, err := gzip.NewReader(resp.Body)
+						if err != nil {
+							resp.StatusCode = http.StatusInternalServerError
+							continue
+						}
+						body, err = ioutil.ReadAll(reader)
+						reader.Close()
+					default:
+						body, err = ioutil.ReadAll(resp.Body)
+					}
+
 					if err != nil {
 						resp.StatusCode = http.StatusInternalServerError
 						continue
 					}
-					resp.Body.Close()
 
 					switch resp.StatusCode {
 					case http.StatusOK:
@@ -172,24 +197,16 @@ func (x *perSite) queueHandler() {
 						}
 						x.transportErrorCount = 0
 						x.transportErrorMessage = ""
-						recipe, _ := x.parent.scrape.ScrapeRecipe(siteURL, body)
+						recipe, _ := x.parent.scrape.ScrapeRecipe(sourceURL, body)
 						x.parent.ReplyChan <- recipe
-						if x.limit < 20.0 {
-							x.limit += .1
-							x.limiter.SetLimit(x.limit)
-						}
 						return
 					case http.StatusForbidden:
 						continue
 					case http.StatusLengthRequired:
 						continue
 					default:
-						if x.limit > .4 {
-							x.limit -= .1
-							x.limiter.SetLimit(x.limit)
-						}
 						recipe := &scraper.RecipeObject{
-							SiteURL:    siteURL,
+							SourceURL:    sourceURL,
 							StatusCode: resp.StatusCode,
 							Error:      "HTTP error",
 						}
@@ -208,13 +225,13 @@ func (x *perSite) queueHandler() {
 				}
 			}
 			recipe := &scraper.RecipeObject{
-				SiteURL:    siteURL,
+				SourceURL:    sourceURL,
 				StatusCode: resp.StatusCode,
 			}
 			if err != nil {
 				recipe.Error = err.Error()
 			}
 			x.parent.ReplyChan <- recipe
-		}(x, siteURL)
+		}(x, sourceURL)
 	}
 }

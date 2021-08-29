@@ -64,11 +64,11 @@ func (x *csvUtil) Open() (err error) {
 			case 0:
 				// skip headings
 			default:
-				siteURL := val[x.urlIdx] // GET the url string
-				if siteURL == "" {
+				sourceURL := val[x.urlIdx] // GET the url string
+				if sourceURL == "" {
 					continue
 				}
-				x.C <- siteURL
+				x.C <- sourceURL
 			}
 		}
 		close(x.C)

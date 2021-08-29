@@ -10,7 +10,7 @@ import (
 )
 
 // schemaOrgMicrodata - schema.org Microdata format
-func (x *Scraper) schemaOrgMicrodata(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+func (x *Scraper) schemaOrgMicrodata(sourceURL string, body []byte, recipe *RecipeObject) (found bool) {
 	recipe.RecipeIngredient	= nil
 
 	recipeBlock := false
@@ -23,7 +23,7 @@ func (x *Scraper) schemaOrgMicrodata(siteUrl string, body []byte, recipe *Recipe
 		switch tokenType {
 		case html.ErrorToken:
 			if len(recipe.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, recipeFormat)
+				recipe.Scraper = recipeFormat
 				return true
 			}
 			return false

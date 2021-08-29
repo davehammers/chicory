@@ -37,11 +37,11 @@ func NewLegacy() *legacyClient {
 	return out
 }
 
-func (x *legacyClient)Get(siteURL string) (out Legacy) {
+func (x *legacyClient)Get(sourceURL string) (out Legacy) {
 	type postURL struct {
 		URLStr string `json:"url"`
 	}
-	b, _ := json.Marshal(postURL{URLStr: siteURL})
+	b, _ := json.Marshal(postURL{URLStr: sourceURL})
 	resp, err := x.client.Post("https://prod-scraper.chicoryapp.com/api/scrape/recipe", "application/json", bytes.NewReader(b))
 	if err != nil {
 		out.Error = err.Error()

@@ -16,11 +16,10 @@ const (
 )
 
 // jsonParser tries to extract recipe in JSON-LD format
-func (x *Scraper) jsonParser(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+func (x *Scraper) jsonParser(sourceURL string, body []byte, recipe *RecipeObject) (found bool) {
 	insideScript := false
 	if strings.Contains(string(body), `"@type":"Recipe"`) ||
 		strings.Contains(string(body), `"@type": "Recipe"`) {
-		recipe.Attributes = append(recipe.Attributes, "@type:Recipe")
 	}
 	tokenizer := html.NewTokenizer(bytes.NewReader(body))
 	for {
@@ -49,15 +48,15 @@ func (x *Scraper) jsonParser(siteUrl string, body []byte, recipe *RecipeObject) 
 			}
 			text := tokenizer.Text()
 			switch {
-			case x.graph_schemaOrgJSON(siteUrl, text, recipe):
+			case x.graph_schemaOrgJSON(sourceURL, text, recipe):
 				return true
-			case x.schemaOrg_RecipeJSON(siteUrl, text, recipe):
+			case x.schemaOrg_RecipeJSON(sourceURL, text, recipe):
 				return true
-			case x.schemaOrg_List(siteUrl, text, recipe):
+			case x.schemaOrg_List(sourceURL, text, recipe):
 				return true
-			case x.schemaOrg_ItemListJSON(siteUrl, text, recipe):
+			case x.schemaOrg_ItemListJSON(sourceURL, text, recipe):
 				return true
-			case x.jsonSchemaRemoveHTML(siteUrl, text, recipe):
+			case x.jsonSchemaRemoveHTML(sourceURL, text, recipe):
 				return true
 			default:
 				continue
@@ -71,12 +70,9 @@ func (x *Scraper) jsonParser(siteUrl string, body []byte, recipe *RecipeObject) 
 // this parser assumes that there is HTML mixed in with the JSON
 // It tries to remove all of the mixed in HTML then reprocess the JSON
 // https://mealpreponfleek.com/low-carb-hamburger-helper/
-func (x *Scraper) jsonSchemaRemoveHTML(siteUrl string, body []byte, recipe *RecipeObject) (ok bool) {
+func (x *Scraper) jsonSchemaRemoveHTML(sourceURL string, body []byte, recipe *RecipeObject) (ok bool) {
 	textOut := make([]string, 0)
 	// is this a schema.org JSON string
-	if strings.Contains(string(body), "ld+json") {
-		recipe.Attributes = append(recipe.Attributes, "ld+json")
-	}
 	if !strings.Contains(string(body), "recipeIngredient") {
 		return false
 	}
@@ -104,20 +100,15 @@ func (x *Scraper) jsonSchemaRemoveHTML(siteUrl string, body []byte, recipe *Reci
 	// now try the json parsers again
 	text := []byte(strings.Join(textOut, " "))
 	switch {
-	case x.schemaOrg_RecipeJSON(siteUrl, text, recipe):
-		recipe.Attributes = append(recipe.Attributes, "JSON repaired")
+	case x.schemaOrg_RecipeJSON(sourceURL, text, recipe):
 		return true
-	case x.graph_schemaOrgJSON(siteUrl, text, recipe):
-		recipe.Attributes = append(recipe.Attributes, "JSON repaired")
+	case x.graph_schemaOrgJSON(sourceURL, text, recipe):
 		return true
-	case x.schemaOrg_List(siteUrl, text, recipe):
-		recipe.Attributes = append(recipe.Attributes, "JSON repaired")
+	case x.schemaOrg_List(sourceURL, text, recipe):
 		return true
-	case x.schemaOrg_ItemListJSON(siteUrl, text, recipe):
-		recipe.Attributes = append(recipe.Attributes, "JSON repaired")
+	case x.schemaOrg_ItemListJSON(sourceURL, text, recipe):
 		return true
 	}
-	log.Error(siteUrl, "body contains schema.org/recipeIngredient json but did not parse")
-	recipe.Attributes = append(recipe.Attributes, "No JSON Parser")
+	log.Error(sourceURL, "body contains schema.org/recipeIngredient json but did not parse")
 	return false
 }

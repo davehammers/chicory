@@ -16,7 +16,7 @@ import (
 <li>
 </div>
 */
-func (x *Scraper) htmlCustomDivLiLiDiv(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+func (x *Scraper) htmlCustomDivLiLiDiv(sourceURL string, body []byte, recipe *RecipeObject) (found bool) {
 	recipe.RecipeIngredient = nil
 	recipeBlock := false
 	textIsIngredient := false
@@ -32,7 +32,7 @@ func (x *Scraper) htmlCustomDivLiLiDiv(siteUrl string, body []byte, recipe *Reci
 		switch tokenType {
 		case html.ErrorToken:
 			if len(recipe.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "custom <div><li></li></div>")
+				recipe.Scraper = "custom <div><li></li></div>"
 				return true
 			}
 			return false

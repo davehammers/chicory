@@ -129,13 +129,13 @@ func (x *scraperType) processCSV() (err error){
 		switch idx {
 		case 0:
 		default:
-			siteURL := val[x.urlIdx] // GET the url string
-			if siteURL == "" {
+			sourceURL := val[x.urlIdx] // GET the url string
+			if sourceURL == "" {
 				continue
 			}
-			err = x.siteClient.SiteGetRecipe(siteURL)
+			err = x.siteClient.SiteGetRecipe(sourceURL)
 			if err != nil {
-				log.Println("URL Error", siteURL, err)
+				log.Println("URL Error", sourceURL, err)
 			}
 		}
 	}
@@ -177,7 +177,7 @@ func (x *scraperType) worker() {
 		case recipe := <-x.siteClient.ReplyChan:
 			// count by HTTP code
 			activity = true
-			u, _ := url.Parse(recipe.SiteURL)
+			u, _ := url.Parse(recipe.SourceURL)
 			// count statusCode/Site
 			if _, ok := x.sumCodeSite[recipe.StatusCode]; !ok {
 				x.sumCodeSite[recipe.StatusCode] = make(bySite)
@@ -192,27 +192,26 @@ func (x *scraperType) worker() {
 
 			switch recipe.StatusCode {
 			case http.StatusOK:
-				scraper := recipe.Scraper[0]
-				x.sumURLScraper[recipe.SiteURL] = scraper
+				x.sumURLScraper[recipe.SourceURL] = recipe.Scraper
 				// count sites per scraper
-				if _, ok := x.sumScraperSite[scraper]; !ok {
-					x.sumScraperSite[scraper] = make(bySite)
+				if _, ok := x.sumScraperSite[recipe.Scraper]; !ok {
+					x.sumScraperSite[recipe.Scraper] = make(bySite)
 				}
-				x.sumScraperSite[scraper][u.Host]++
+				x.sumScraperSite[recipe.Scraper][u.Host]++
 				// count scrapers per site
 				if _, ok := x.sumSiteScraper[u.Host]; !ok {
 					x.sumSiteScraper[u.Host] = make(byScraper)
 				}
-				x.sumSiteScraper[u.Host][scraper]++
+				x.sumSiteScraper[u.Host][recipe.Scraper]++
 
 				b, err := JSONMarshal(recipe)
 				if err == nil {
-					log.Println(recipe.StatusCode, recipe.SiteURL)
+					log.Println(recipe.StatusCode, recipe.SourceURL)
 					fmt.Println(string(b))
 				}
 			default:
-				log.Println(recipe.StatusCode, recipe.SiteURL, recipe.Error)
-				x.sumURLScraper[recipe.SiteURL] = fmt.Sprintf("HTTP %d",recipe.StatusCode)
+				log.Println(recipe.StatusCode, recipe.SourceURL, recipe.Error)
+				x.sumURLScraper[recipe.SourceURL] = fmt.Sprintf("HTTP %d",recipe.StatusCode)
 			}
 		}
 	}

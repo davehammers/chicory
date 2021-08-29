@@ -45,15 +45,15 @@ func (x *Compare) Main() {
 
 	// loop through all of the urls
 	x.csvLines = append(x.csvLines, []string{"url", "scraper", "Legacy", "New"})
-	for siteURL := range c.C {
+	for sourceURL := range c.C {
 		// get web page directly
 		recipeError := ""
-		recipe, err := rc.GetRecipe(siteURL)
+		recipe, err := rc.GetRecipe(sourceURL)
 		if err != nil {
 			recipeError = err.Error()
 		}
 		// get legacy scraped information
-		legacyData := legacy.Get(siteURL)
+		legacyData := legacy.Get(sourceURL)
 		scraper := ""
 		switch {
 		case recipe == nil:
@@ -62,8 +62,8 @@ func (x *Compare) Main() {
 			scraper =recipe.Scraper[0]
 		}
 		if recipeError != "" || legacyData.Error != "" {
-			x.csvLines = append(x.csvLines, []string{siteURL, scraper, recipeError, legacyData.Error})
-			fmt.Println(siteURL)
+			x.csvLines = append(x.csvLines, []string{sourceURL, scraper, recipeError, legacyData.Error})
+			fmt.Println(sourceURL)
 			if legacyData.Error != "" {
 				fmt.Println("\tPHP Err:\t",legacyData.Error )
 			}
@@ -73,10 +73,10 @@ func (x *Compare) Main() {
 			continue
 		}
 
-		fmt.Printf("%s\t%s\n", siteURL, recipe.Scraper[0])
+		fmt.Printf("%s\t%s\n", sourceURL, recipe.Scraper[0])
 		for idx, row1 := range legacyData.Data.Items {
 			if !searchStringList(recipe.RecipeIngredient, row1.Text) {
-				x.csvLines = append(x.csvLines, []string{siteURL, recipe.Scraper[0], row1.Text, recipe.RecipeIngredient[idx]})
+				x.csvLines = append(x.csvLines, []string{sourceURL, recipe.Scraper[0], row1.Text, recipe.RecipeIngredient[idx]})
 				fmt.Println("PHP",idx, "\t", row1.Text)
 				fmt.Println("________")
 				for _, l := range  legacyData.Data.Items{
@@ -86,7 +86,7 @@ func (x *Compare) Main() {
 				for _, n := range recipe.RecipeIngredient {
 					fmt.Println("New\t",n)
 				}
-				fmt.Println("URL:", siteURL)
+				fmt.Println("URL:", sourceURL)
 				fmt.Println("Scraper",recipe.Scraper[0])
 				fmt.Println("")
 				break

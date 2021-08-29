@@ -9,7 +9,7 @@ import (
 	"golang.org/x/net/html"
 )
 
-func (x *Scraper) htmlCustomLabelLabel(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+func (x *Scraper) htmlCustomLabelLabel(sourceURL string, body []byte, recipe *RecipeObject) (found bool) {
 	recipe.RecipeIngredient = nil
 	tokenWords := []string{
 		"recipeingredient",
@@ -22,7 +22,7 @@ func (x *Scraper) htmlCustomLabelLabel(siteUrl string, body []byte, recipe *Reci
 		switch tokenType {
 		case html.ErrorToken:
 			if len(recipe.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "custom <label></label>")
+				recipe.Scraper = "custom <label></label>"
 				return true
 			}
 			return false

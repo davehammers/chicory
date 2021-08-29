@@ -10,7 +10,7 @@ import (
 )
 
 // htmlHRecipe - micro format
-func (x *Scraper) htmlHRecipe(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
+func (x *Scraper) htmlHRecipe(sourceURL string, body []byte, recipe *RecipeObject) (found bool) {
 	recipe.RecipeIngredient = nil
 
 	recipeBlock := false
@@ -22,7 +22,7 @@ func (x *Scraper) htmlHRecipe(siteUrl string, body []byte, recipe *RecipeObject)
 		switch tokenType {
 		case html.ErrorToken:
 			if len(recipe.RecipeIngredient) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "hrecipe")
+				recipe.Scraper = "hrecipe"
 				return true
 			}
 			return false

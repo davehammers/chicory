@@ -17,16 +17,7 @@ import (
 <li class="ingredient" itemprop="ingredients">1 teaspoon salt</li>
 <li class="ingredient" itemprop="ingredients">1/2 teaspoon pepper</li>
 */
-func (x *Scraper) htmlCustomLiLi(siteUrl string, body []byte, recipe *RecipeObject) (found bool) {
-	tokenWords := map[string]tokenActions{
-		`class="ingredient"`:      {false, true},
-		`class="ingredient `:      {false, true},
-		`class="ingredients"`:     {false, true},
-		`itemprop="ingredients"`:  {false, true},
-		`itemprop=ingredients`:    {false, true},
-		`class="ingredient-item"`: {false, true},
-		"p-ingredient":            {false, true},
-	}
+func (x *Scraper) htmlCustomLiLi(sourceURL string, body []byte, recipe *RecipeObject) (found bool) {
 	// current action for text token
 	var textAction tokenActions
 
@@ -39,7 +30,7 @@ func (x *Scraper) htmlCustomLiLi(siteUrl string, body []byte, recipe *RecipeObje
 		switch tokenType {
 		case html.ErrorToken:
 			if len(ingredients) > 0 {
-				recipe.Scraper = append(recipe.Scraper, "custom <li></li>")
+				recipe.Scraper = "custom <li></li>"
 				recipe.RecipeIngredient = ingredients
 				return true
 			}
@@ -49,8 +40,16 @@ func (x *Scraper) htmlCustomLiLi(siteUrl string, body []byte, recipe *RecipeObje
 			rawTag := strings.ToLower(string(tokenizer.Raw()))
 			switch string(name) {
 			case "li":
-				for k, v := range tokenWords {
-					if strings.Contains(rawTag, k) {
+				for _, v := range []tokenActions{
+						{`class="ingredient"`,      false, true},
+						{`class="ingredient `,      false, true},
+						{`class="ingredients"`,     false, true},
+						{`itemprop="ingredients"`,  false, true},
+						{`itemprop=ingredients`,    false, true},
+						{`class="ingredient-item"`, false, true},
+						{"p-ingredient",            false, true},
+					} {
+					if strings.Contains(rawTag, v.keyWord) {
 						textAction = v
 						textIsIngredient = true
 						break

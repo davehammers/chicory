@@ -19,17 +19,17 @@ type IngredientResponse struct {
 
 // scrape - dump all of the found recipe details to the browser
 func (x *Server) scrape(c *fiber.Ctx) (err error) {
-	siteURL := c.OriginalURL()
-	parts := strings.SplitN(siteURL,"=", 2)
+	sourceURL := c.OriginalURL()
+	parts := strings.SplitN(sourceURL,"=", 2)
 	if len(parts) != 2 {
 		err = fmt.Errorf("No url parameter specified")
 		c.SendString(err.Error())
 		return c.SendStatus(http.StatusBadRequest)
 	}
-	siteURL = parts[1]
-	fmt.Println(siteURL)
+	sourceURL = parts[1]
+	fmt.Println(sourceURL)
 
-	recipe, err := x.client.GetRecipe(siteURL)
+	recipe, err := x.client.GetRecipe(sourceURL)
 	switch err.(type) {
 	case nil:
 	case recipeclient.NotFoundError:
