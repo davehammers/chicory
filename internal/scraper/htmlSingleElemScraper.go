@@ -3,7 +3,6 @@ package scraper
 // contains definitions and functions for accessing and parsing recipes from URLs
 
 import (
-	"bytes"
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
 	"strings"
@@ -37,6 +36,7 @@ var singleElements []singleElem = []singleElem{
 	{atom.Li, "itemprop", "ingredients", false, true},
 	{atom.Li, "class", "ingredient", false, true},
 	{atom.Li, "itemprop", "recipeingredient", false, true},
+	{atom.Li, "class", "blog-yumprint-ingredient-item", false, true},
 
 	// <div>
 	{atom.Div, "itemprop", "recipeingredient", false, true},
@@ -48,7 +48,7 @@ var singleElements []singleElem = []singleElem{
 
 	// <p>
 	{atom.P, "class", "ingredient", false, true},
-	{atom.P, "itemprop", "recipeingredient", false, true},
+	//{atom.P, "itemprop", "recipeingredient", false, true},
 }
 
 type singleElemScraper struct {
@@ -60,27 +60,16 @@ type singleElemScraper struct {
 	recipe           *RecipeObject
 }
 
-func (x *Scraper) htmlTokenizer(sourceURL string, body []byte, recipe *RecipeObject) (found bool) {
+func (x *Scraper) htmlSingleElemScraper(sourceURL string, doc *html.Node, recipe *RecipeObject) (found bool) {
 	// parse body into a node tree
-	doc, err := html.Parse(bytes.NewReader(body))
-	if err != nil {
-		return
-	}
 	s := NewSingleElemScraper(recipe)
-	x.traverseDoc(doc, s.startNode, s.endNode)
+	// traverse the HTML nodes calling startNode at the beginning and endNode at the end of each node
+	x.traverseNodes(doc, s.startNode, s.endNode)
 	if len(recipe.RecipeIngredient) > 0 {
 		recipe.Scraper = "HTML Single Elem Scraper"
 		return true
 	}
 	return false
-}
-
-func (x *Scraper) traverseDoc(n *html.Node, startNode func(*html.Node), endNode func(*html.Node)) {
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		startNode(c)
-		x.traverseDoc(c, startNode, endNode)
-		endNode(c)
-	}
 }
 
 func NewSingleElemScraper(recipe *RecipeObject) *singleElemScraper {

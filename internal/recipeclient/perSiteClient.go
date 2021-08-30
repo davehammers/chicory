@@ -6,8 +6,11 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/net/publicsuffix"
 	"io/ioutil"
 	"net/http"
+	"net/http/cookiejar"
 	"net/url"
 	"sync"
 	"time"
@@ -21,17 +24,27 @@ import (
 )
 
 const (
-	defaultConcurrentPerSite = .1
-	siteDefaultMaxWorkers = 4
-	defaultMaxWorkers        = 100
+	defaultTransPerMinute = 5.0
+	siteDefaultMaxWorkers = 2
+	defaultMaxWorkers     = 100
 )
 
+var CustomWebsites = []struct {
+	site        string
+	workers     int64
+	transPerMin int64
+}{
+	{"www.thekitchn.com", 1, 2},
+	{"www.beefitswhatsfordinner.com", 1, 5},
+	{"www.tasteofhome.com", 5, 300},
+}
+
 type perSite struct {
-	sourceURL               string
+	sourceURL             string
 	ctx                   context.Context
-	limit rate.Limit
+	limit                 rate.Limit
 	limiter               *rate.Limiter
-	maxWorkers  *semaphore.Weighted
+	maxWorkers            *semaphore.Weighted
 	queueSem              *sync.Cond
 	queue                 chan string
 	requestCount          int
@@ -51,6 +64,7 @@ type SiteClient struct {
 
 func NewSiteClient() *SiteClient {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.Proxy = http.ProxyFromEnvironment
 	tr.MaxIdleConns = 500
 	tr.IdleConnTimeout = 30 * time.Second
 	tr.MaxConnsPerHost = 2
@@ -62,26 +76,42 @@ func NewSiteClient() *SiteClient {
 	tr.TLSHandshakeTimeout = 45 * time.Second
 	tr.DisableCompression = false
 
+	// All users of cookiejar should import "golang.org/x/net/publicsuffix"
+	jar, err := cookiejar.New(&cookiejar.Options{PublicSuffixList: publicsuffix.List})
+	if err != nil {
+		log.Error(err)
+	}
 	return &SiteClient{
 		ReplyChan:   make(chan *scraper.RecipeObject),
 		perSiteLock: &sync.RWMutex{},
 		site:        make(map[string]*perSite),
 		scrape:      scraper.New(),
 		maxWorkers:  semaphore.NewWeighted(defaultMaxWorkers),
-		Client:      &http.Client{Transport: tr, Timeout: time.Second * 60},
+		Client:      &http.Client{Jar: jar, Transport: tr, Timeout: time.Second * 60},
 	}
 }
 
 func (x *SiteClient) newSite(sourceURL string) *perSite {
 	out := &perSite{
-		sourceURL:  sourceURL,
-		ctx:      context.Background(),
-		limit: rate.Limit(defaultConcurrentPerSite),
-		limiter:  rate.NewLimiter(rate.Limit(defaultConcurrentPerSite), 1),
-		maxWorkers:  semaphore.NewWeighted(siteDefaultMaxWorkers),
-		queue:    make(chan string, 1000),
-		queueSem: sync.NewCond(&sync.RWMutex{}),
-		parent:   x,
+		sourceURL: sourceURL,
+		ctx:       context.Background(),
+		limit:     rate.Limit(defaultTransPerMinute),
+		queue:     make(chan string, 1000),
+		queueSem:  sync.NewCond(&sync.RWMutex{}),
+		parent:    x,
+	}
+	u, err := url.Parse(sourceURL)
+	if err == nil {
+		for _, site := range CustomWebsites {
+			if u.Host == site.site {
+				out.maxWorkers = semaphore.NewWeighted(site.workers)
+				// 10 transactions/min
+				out.limiter = rate.NewLimiter(rate.Limit(float64(site.transPerMin)/60.0), 1)
+				break
+			}
+		}
+		out.maxWorkers = semaphore.NewWeighted(siteDefaultMaxWorkers)
+		out.limiter = rate.NewLimiter(rate.Limit(defaultTransPerMinute/60.0), 1)
 	}
 	go out.queueHandler()
 
@@ -114,7 +144,7 @@ func (x *perSite) queueHandler() {
 		// is URL parsable
 		if _, err := url.Parse(sourceURL); err != nil {
 			recipe := &scraper.RecipeObject{
-				SourceURL:    sourceURL,
+				SourceURL:  sourceURL,
 				StatusCode: http.StatusBadRequest,
 				Error:      err.Error(),
 			}
@@ -127,7 +157,7 @@ func (x *perSite) queueHandler() {
 		//}
 		if x.transportErrorCount > 50 {
 			recipe := &scraper.RecipeObject{
-				SourceURL:    sourceURL,
+				SourceURL:  sourceURL,
 				StatusCode: http.StatusServiceUnavailable,
 				Error:      x.transportErrorMessage,
 			}
@@ -137,6 +167,8 @@ func (x *perSite) queueHandler() {
 
 		// limit the number of concurrent transactions
 		x.maxWorkers.Acquire(x.ctx, 1)
+		// limit the rate on the website
+		//x.limiter.Wait(x.ctx)
 
 		go func(x *perSite, sourceURL string) {
 			var resp *http.Response
@@ -147,12 +179,15 @@ func (x *perSite) queueHandler() {
 				if err != nil {
 					return
 				}
-				req.Header.Set("User-Agent","Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/92.0.4515.131 Safari/537.36")
-				req.Header.Set("accept","text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
+				req.Header.Set("User-Agent", RandomUserAgent())
+				req.Header.Set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
+				//req.Header.Set("accept","*/*")
 				req.Header.Set("referer", sourceURL)
 				req.Header.Add("Accept-Encoding", "gzip")
 				req.Header.Add("Accept-Encoding", "br")
-
+				if u, err := url.Parse(sourceURL); err != nil {
+					req.Header.Set("host", u.Host)
+				}
 
 				x.parent.maxWorkers.Acquire(x.ctx, 1)
 				resp, err = x.parent.Client.Do(req)
@@ -206,7 +241,7 @@ func (x *perSite) queueHandler() {
 						continue
 					default:
 						recipe := &scraper.RecipeObject{
-							SourceURL:    sourceURL,
+							SourceURL:  sourceURL,
 							StatusCode: resp.StatusCode,
 							Error:      "HTTP error",
 						}
@@ -225,7 +260,7 @@ func (x *perSite) queueHandler() {
 				}
 			}
 			recipe := &scraper.RecipeObject{
-				SourceURL:    sourceURL,
+				SourceURL:  sourceURL,
 				StatusCode: resp.StatusCode,
 			}
 			if err != nil {
