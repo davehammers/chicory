@@ -64,11 +64,14 @@ func (x *Scraper) ScrapeRecipe(sourceURL string, body []byte) (recipe *RecipeObj
 	}
 	recipe.SourceURL = sourceURL
 	if recipe.StatusCode == http.StatusOK {
+		recipe.StatusCode = http.StatusUnprocessableEntity
+		recipe.Error = "No Scraper Found"
 		recipe.Scraper = "No Scraper Found"
 	} else {
 		recipe.Scraper = fmt.Sprintf("HTTP %d", recipe.StatusCode)
 	}
-	recipe.Error = "No Scraper match"
+	recipe.StatusCode = http.StatusUnprocessableEntity
+	recipe.Error = "No Scraper Found"
 	found = false
 	return
 }
