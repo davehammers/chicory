@@ -210,7 +210,7 @@ func (x *scraperType) worker() {
 					fmt.Println(string(b))
 				}
 			default:
-				log.Printf("%d %s", recipe.StatusCode, recipe.Error)
+				log.Printf("%d %s %s", recipe.StatusCode, recipe.SourceURL, recipe.Error)
 				x.sumURLScraper[recipe.SourceURL] = fmt.Sprintf("HTTP %d", recipe.StatusCode)
 			}
 		}
