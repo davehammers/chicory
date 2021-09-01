@@ -1,0 +1,5 @@
+testdata
+cmd/compare/compare
+cmd/scraper/scraper
+cmd/scraptype/scraptype
+.idea
