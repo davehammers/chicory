@@ -135,7 +135,7 @@ func (x *scraperType) processCSV() (err error){
 			}
 			err = x.siteClient.SiteGetRecipe(sourceURL)
 			if err != nil {
-				log.Println("URL Error", sourceURL, err)
+				log.Println("URL Error ", sourceURL, err)
 			}
 		}
 	}
@@ -206,11 +206,11 @@ func (x *scraperType) worker() {
 
 				b, err := JSONMarshal(recipe)
 				if err == nil {
-					log.Println(recipe.StatusCode, recipe.SourceURL)
+					log.Printf("%d %s",recipe.StatusCode, recipe.SourceURL)
 					fmt.Println(string(b))
 				}
 			default:
-				log.Println(recipe.StatusCode, recipe.SourceURL, recipe.Error)
+				log.Printf("%d %s %s",recipe.StatusCode, recipe.Error)
 				x.sumURLScraper[recipe.SourceURL] = fmt.Sprintf("HTTP %d",recipe.StatusCode)
 			}
 		}

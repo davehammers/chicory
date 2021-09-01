@@ -15,14 +15,14 @@ type RecipeSchema3 []struct {
 
 // schemaOrg_List parse json schema 3
 // http://allrecipes.com/recipe/12646/cheese-and-garden-vegetable-pie/
-func (x *Scraper) schemaOrg_List(sourceURL string, text []byte, recipe *RecipeObject) (ok bool) {
+func (x *jsonParserType) schemaOrg_List(text string) (ok bool) {
 	r := RecipeSchema3{}
-	err := json.Unmarshal(text, &r)
+	err := json.Unmarshal([]byte(text), &r)
 	if err == nil {
 		for _, entry := range r {
 			if len(entry.RecipeIngredient) > 0 {
-				recipe.Scraper = "JSON List schemaOrg Recipe"
-				x.appendLine(recipe, entry.RecipeIngredient)
+				x.recipe.Scraper = "JSON List schemaOrg Recipe"
+				x.scraper.appendLine(x.recipe, entry.RecipeIngredient)
 				return true
 			}
 		}

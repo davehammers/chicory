@@ -35,21 +35,21 @@ type cuisineType struct {
 
 // schemaOrg_RecipeJSON parse json schema 1
 // http://30pepperstreet.com/recipe/endive-salad/
-func (x *Scraper) schemaOrg_RecipeJSON(sourceURL string, text []byte, recipe *RecipeObject) (ok bool) {
+func (x *jsonParserType) schemaOrg_RecipeJSON(text string) (ok bool) {
 	r := SchemaOrgRecipe{}
-	err := json.Unmarshal(text, &r)
+	err := json.Unmarshal([]byte(text), &r)
 	switch err {
 	case nil:
 		if len(r.RecipeIngredient) == 0 {
 			break
 		}
-		recipe.Scraper = "JSON Single schemaOrg Recipe"
-		x.appendLine(recipe, r.RecipeIngredient)
+		x.recipe.Scraper = "JSON Single schemaOrg Recipe"
+		x.scraper.appendLine(x.recipe, r.RecipeIngredient)
 
 		// the remaining fields are optional
-		recipe.RecipeCategory = x.extractString(sourceURL, r.RecipeCategory)
-		recipe.RecipeCuisine = x.extractString(sourceURL, r.RecipeCuisine)
-		recipe.Image = x.extractString(sourceURL, r.Image)
+		x.recipe.RecipeCategory = x.extractString(r.RecipeCategory)
+		x.recipe.RecipeCuisine = x.extractString(r.RecipeCuisine)
+		x.recipe.Image = x.extractString(r.Image)
 
 		return true
 	default:
@@ -57,7 +57,7 @@ func (x *Scraper) schemaOrg_RecipeJSON(sourceURL string, text []byte, recipe *Re
 	}
 	return false
 }
-func (x *Scraper) extractString(sourceURL string, in interface{}) string {
+func (x *jsonParserType) extractString(in interface{}) string {
 	switch t := in.(type) {
 	case nil:
 		return ""
@@ -93,7 +93,7 @@ func (x *Scraper) extractString(sourceURL string, in interface{}) string {
 		for _, v := range t {
 			return fmt.Sprint(v)
 		}
-		return fmt.Sprintf("Error: %s %T, %q\n", sourceURL, in, in)
+		return fmt.Sprintf("Error: %s %T, %q\n", x.sourceURL, in, in)
 	case map[string]interface{}:
 		b, err := json.Marshal(in)
 		if err != nil {

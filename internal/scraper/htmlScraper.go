@@ -1,8 +1,6 @@
 package scraper
 
 import (
-	"bytes"
-	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 )
 
@@ -16,13 +14,8 @@ type tokenActions struct {
 
 //type HTMLScraper func(sourceURL string, doc *html.Node, recipe *RecipeObject) (found bool)
 
-func (x *Scraper) htmlParser(sourceURL string, body []byte, recipe *RecipeObject) (found bool) {
+func (x *Scraper) htmlParser(sourceURL string, doc *html.Node, recipe *RecipeObject) (found bool) {
 	//fmt.Println(string(body))
-	doc, err := html.Parse(bytes.NewReader(body))
-	if err != nil {
-		log.Error(err)
-		return false
-	}
 	switch {
 	case x.htmlSingleElemScraper(sourceURL, doc, recipe):
 	case x.htmlNestedElemScraper(sourceURL, doc, recipe):

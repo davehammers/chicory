@@ -3,7 +3,9 @@ package scraper
 // contains definitions and functions for accessing and parsing recipes from URLs
 
 import (
+	"bytes"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
 	"net/http"
 	"strings"
@@ -36,43 +38,38 @@ type RecipeObject struct {
 // ScrapeRecipe scrapes recipe from body returns RecipeObject, found = true if found
 func (x *Scraper) ScrapeRecipe(sourceURL string, body []byte) (recipe *RecipeObject, found bool) {
 	//os.WriteFile("dump.html", body, 0666)
+	doc, err := html.Parse(bytes.NewReader(body))
+	// did HTML body parse correctly?
+	if err != nil {
+		log.Error(err)
+		return nil, false
+	}
+
+	// init blank recipe object
 	recipe = &RecipeObject{
 		SourceURL:  sourceURL,
 		StatusCode: http.StatusOK,
 		Error:      "",
 	}
-	jsonFound := x.jsonParser(sourceURL, body, recipe)
-	if jsonFound {
-		found = true
-		return
-	}
 
-	htmlRecipe := &RecipeObject{
-		SourceURL:  sourceURL,
-		StatusCode: http.StatusOK,
-		Error:      "",
-	}
-	httpFound := x.htmlParser(sourceURL, body, htmlRecipe)
-	if jsonFound || httpFound {
-		found = true
-		recipe.Scraper = htmlRecipe.Scraper
-		if len(recipe.RecipeIngredient) == 0 {
-			recipe.RecipeIngredient = htmlRecipe.RecipeIngredient
+	switch {
+	case x.jsonParser(sourceURL, doc, recipe): // invoke JSON scrapers
+	case x.htmlParser(sourceURL, doc, recipe): // invoke HTML scrapers
+	default:
+		switch recipe.StatusCode {
+		case http.StatusOK:
+			recipe.Scraper = "No Scraper Found"
+			recipe.Error = "No Scraper Found"
+			recipe.StatusCode = http.StatusUnprocessableEntity
+		default:
+			recipe.Scraper = fmt.Sprintf("HTTP %d %s", recipe.StatusCode, http.StatusText(recipe.StatusCode))
+			recipe.Error = http.StatusText(recipe.StatusCode)
 		}
-
+		found = false
 		return
 	}
-	recipe.SourceURL = sourceURL
-	if recipe.StatusCode == http.StatusOK {
-		recipe.StatusCode = http.StatusUnprocessableEntity
-		recipe.Error = "No Scraper Found"
-		recipe.Scraper = "No Scraper Found"
-	} else {
-		recipe.Scraper = fmt.Sprintf("HTTP %d", recipe.StatusCode)
-	}
-	recipe.StatusCode = http.StatusUnprocessableEntity
-	recipe.Error = "No Scraper Found"
-	found = false
+	// One of the scrapers was successful
+	found = true
 	return
 }
 
