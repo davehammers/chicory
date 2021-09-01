@@ -19,13 +19,6 @@ func (x *Scraper) htmlParser(sourceURL string, doc *html.Node, recipe *RecipeObj
 	switch {
 	case x.htmlSingleElemScraper(sourceURL, doc, recipe):
 	case x.htmlNestedElemScraper(sourceURL, doc, recipe):
-	//case x.schemaOrgMicrodata(sourceURL, body, recipe):
-	//case x.htmlHRecipe(sourceURL, body, recipe):
-	//case x.htmlCustomDivDiv(sourceURL, body, recipe):
-	//case x.htmlCustomLiLi(sourceURL, body, recipe):
-	//case x.htmlCustomScanScan(sourceURL, body, recipe):
-	//case x.htmlCustomLabelLabel(sourceURL, body, recipe):
-	//case x.htmlCustomDivLiLiDiv(sourceURL, body, recipe):
 	default:
 		return false
 	}

@@ -4,24 +4,17 @@ package scraper
 
 import (
 	"bytes"
+	"context"
 	"fmt"
+	"net/http"
+	"regexp"
+	"strings"
+	"sync"
+
+	"github.com/dgraph-io/ristretto"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/html"
-	"net/http"
-	"strings"
-)
-
-const (
-	SchemaOrgRecipeType        = "SchemaOrgRecipeType"
-	graph_schemaOrgJSONType    = "GraphEmbeddedSchemaOrgJSONType"
-	schemaOrg_ListType         = "schemaOrg_ListType"
-	schemaOrg_ItemListJSONType = "schemaOrgItemListJSONType"
-
-	HTML1RecipeType = "<li></li>"
-	HTML2RecipeType = "<scan></scan>"
-	HTML3RecipeType = "HTML3"
-	HTML4RecipeType = "HTML4"
-	HTML5RecipeType = "HTML5"
+	"golang.org/x/sync/semaphore"
 )
 
 type RecipeObject struct {
@@ -33,6 +26,43 @@ type RecipeObject struct {
 	RecipeCuisine    string   `json:"recipeCuisine"`
 	RecipeIngredient []string `json:"recipeIngredient"`
 	Image            string   `json:"image"`
+}
+
+type Scraper struct {
+	cache         *ristretto.Cache
+	badDomainMap  map[string]int
+	badDomainLock *sync.RWMutex
+	ctx           context.Context
+	maxWorkers    *semaphore.Weighted
+	LineRegEx     *regexp.Regexp
+	AngleRegEx    *regexp.Regexp
+}
+
+// NewClient - allocate a *Scraper
+func New() *Scraper {
+	var err error
+
+	c := Scraper{
+		ctx:           context.Background(),
+		maxWorkers:    semaphore.NewWeighted(1000),
+		badDomainMap:  make(map[string]int),
+		badDomainLock: &sync.RWMutex{},
+		LineRegEx:     regexp.MustCompile("&.*?;"),
+		AngleRegEx:    regexp.MustCompile("<.*?>"),
+	}
+	if err != nil {
+		log.Fatal(err)
+		return &c
+	}
+	cacheCfg := ristretto.Config{
+		NumCounters: 1e7,     // number of keys to track frequency of (10M).
+		MaxCost:     1 << 30, // maximum cost of cache (1GB).
+		BufferItems: 64,      // number of keys per Get buffer.
+	}
+	if c.cache, err = ristretto.NewCache(&cacheCfg); err != nil {
+		log.Fatal(err)
+	}
+	return &c
 }
 
 // ScrapeRecipe scrapes recipe from body returns RecipeObject, found = true if found
@@ -98,6 +128,7 @@ func (x *Scraper) appendString(recipe *RecipeObject, text string) {
 		recipe.RecipeIngredient = append(recipe.RecipeIngredient, text)
 	}
 }
+
 // appendLine -  clean up a recipe line before adding it to the list
 func (x *RecipeObject) AppendLine(item interface{}) {
 	switch i := item.(type) {
