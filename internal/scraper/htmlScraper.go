@@ -7,7 +7,7 @@ import (
 // contains definitions and functions for accessing and parsing recipes from URLs
 
 type tokenActions struct {
-	keyWord string
+	keyWord  string
 	addSpace bool
 	end      bool
 }

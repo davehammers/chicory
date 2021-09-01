@@ -53,9 +53,9 @@ func New() *scraperType {
 		sumSiteCode:    make(siteCode),
 		sumSiteScraper: make(siteScraper),
 		sumScraperSite: make(scraperSite),
-		sumURLScraper: make(urlScraper),
+		sumURLScraper:  make(urlScraper),
 		wg:             &sync.WaitGroup{},
-		csvLines:       make([][]string,0),
+		csvLines:       make([][]string, 0),
 		siteClient:     recipeclient.NewSiteClient(),
 	}
 	return out
@@ -89,7 +89,7 @@ func (x *scraperType) Main() {
 	x.printScraperSummary()
 }
 
-func (x *scraperType) commandParams() (err error){
+func (x *scraperType) commandParams() (err error) {
 	x.csvFileName = flag.String("f", "", "CSV file with urls produced from Superset")
 	flag.Parse()
 	switch {
@@ -110,13 +110,13 @@ func (x *scraperType) loadCSV() (err error) {
 	x.csvLines, err = csv.NewReader(f).ReadAll()
 	f.Close()
 	if len(x.csvLines) == 0 {
-		err = fmt.Errorf("No records found in CSV file %s", x.csvFileName)
+		err = fmt.Errorf("No records found in CSV file %s", *x.csvFileName)
 		return
 	}
 
 	// find the URL column
 	for idx, val := range x.csvLines[0] {
-		if val = strings.ToLower(val);val == "url" {
+		if val = strings.ToLower(val); val == "url" {
 			x.urlIdx = idx
 			break
 		}
@@ -124,7 +124,7 @@ func (x *scraperType) loadCSV() (err error) {
 	return
 }
 
-func (x *scraperType) processCSV() (err error){
+func (x *scraperType) processCSV() (err error) {
 	for idx, val := range x.csvLines {
 		switch idx {
 		case 0:
@@ -143,21 +143,21 @@ func (x *scraperType) processCSV() (err error){
 }
 
 func (x *scraperType) updateCSV() (err error) {
-	for idx, row := range x.csvLines{
+	for idx, row := range x.csvLines {
 		switch idx {
 		case 0:
 			x.csvLines[0] = append(x.csvLines[0], "scraper")
 		default:
 			urlStr := row[x.urlIdx]
 			// find the url scraper
-			if scraper, ok := x.sumURLScraper[urlStr]; ok{
+			if scraper, ok := x.sumURLScraper[urlStr]; ok {
 				x.csvLines[idx] = append(x.csvLines[idx], scraper)
 			} else {
 				x.csvLines[idx] = append(x.csvLines[idx], "")
 			}
 		}
 	}
-	f, err := os.Create(*x.csvFileName+".csv")
+	f, err := os.Create(*x.csvFileName + ".csv")
 	csv.NewWriter(f).WriteAll(x.csvLines)
 	f.Close()
 	return
@@ -206,12 +206,12 @@ func (x *scraperType) worker() {
 
 				b, err := JSONMarshal(recipe)
 				if err == nil {
-					log.Printf("%d %s",recipe.StatusCode, recipe.SourceURL)
+					log.Printf("%d %s", recipe.StatusCode, recipe.SourceURL)
 					fmt.Println(string(b))
 				}
 			default:
-				log.Printf("%d %s %s",recipe.StatusCode, recipe.Error)
-				x.sumURLScraper[recipe.SourceURL] = fmt.Sprintf("HTTP %d",recipe.StatusCode)
+				log.Printf("%d %s", recipe.StatusCode, recipe.Error)
+				x.sumURLScraper[recipe.SourceURL] = fmt.Sprintf("HTTP %d", recipe.StatusCode)
 			}
 		}
 	}

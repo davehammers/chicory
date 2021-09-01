@@ -54,7 +54,7 @@ func (x *RecipeClient) GetRecipe(sourceURL string) (recipe *scraper.RecipeObject
 		return
 	}
 	req.Header.Set("User-Agent", RandomUserAgent())
-	req.Header.Set("accept","text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
+	req.Header.Set("accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9")
 	//req.Header.Set("accept","*/*")
 	req.Header.Set("referer", sourceURL)
 	if u, err := url.Parse(sourceURL); err != nil {
@@ -121,4 +121,3 @@ func (x *RecipeClient) waitForDomain(sourceURL string) {
 		log.Warn(err)
 	}
 }
-

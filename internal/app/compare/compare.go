@@ -57,37 +57,36 @@ func (x *Compare) Main() {
 		scraper := ""
 		switch {
 		case recipe == nil:
-		case recipe.Scraper == nil:
-		case len(recipe.Scraper) >0:
-			scraper =recipe.Scraper[0]
+		case recipe.Scraper != "":
+			scraper = recipe.Scraper
 		}
 		if recipeError != "" || legacyData.Error != "" {
 			x.csvLines = append(x.csvLines, []string{sourceURL, scraper, recipeError, legacyData.Error})
 			fmt.Println(sourceURL)
 			if legacyData.Error != "" {
-				fmt.Println("\tPHP Err:\t",legacyData.Error )
+				fmt.Println("\tPHP Err:\t", legacyData.Error)
 			}
 			if recipeError != "" {
-				fmt.Println("\tNew Err:\t",recipeError )
+				fmt.Println("\tNew Err:\t", recipeError)
 			}
 			continue
 		}
 
-		fmt.Printf("%s\t%s\n", sourceURL, recipe.Scraper[0])
+		fmt.Printf("%s\t%s\n", sourceURL, recipe.Scraper)
 		for idx, row1 := range legacyData.Data.Items {
 			if !searchStringList(recipe.RecipeIngredient, row1.Text) {
-				x.csvLines = append(x.csvLines, []string{sourceURL, recipe.Scraper[0], row1.Text, recipe.RecipeIngredient[idx]})
-				fmt.Println("PHP",idx, "\t", row1.Text)
+				x.csvLines = append(x.csvLines, []string{sourceURL, recipe.Scraper, row1.Text, recipe.RecipeIngredient[idx]})
+				fmt.Println("PHP", idx, "\t", row1.Text)
 				fmt.Println("________")
-				for _, l := range  legacyData.Data.Items{
-					fmt.Println("Old\t",l.Text)
+				for _, l := range legacyData.Data.Items {
+					fmt.Println("Old\t", l.Text)
 				}
 				fmt.Println("________")
 				for _, n := range recipe.RecipeIngredient {
-					fmt.Println("New\t",n)
+					fmt.Println("New\t", n)
 				}
 				fmt.Println("URL:", sourceURL)
-				fmt.Println("Scraper",recipe.Scraper[0])
+				fmt.Println("Scraper", recipe.Scraper[0])
 				fmt.Println("")
 				break
 			}

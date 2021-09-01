@@ -20,7 +20,7 @@ type IngredientResponse struct {
 // scrape - dump all of the found recipe details to the browser
 func (x *Server) scrape(c *fiber.Ctx) (err error) {
 	sourceURL := c.OriginalURL()
-	parts := strings.SplitN(sourceURL,"=", 2)
+	parts := strings.SplitN(sourceURL, "=", 2)
 	if len(parts) != 2 {
 		err = fmt.Errorf("No url parameter specified")
 		c.SendString(err.Error())

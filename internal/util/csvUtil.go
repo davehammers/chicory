@@ -76,7 +76,6 @@ func (x *csvUtil) Open() (err error) {
 	return
 }
 
-
 func (x *csvUtil) Write() (err error) {
 	f, err := os.Create(x.csvFileName + ".csv")
 	csv.NewWriter(f).WriteAll(x.CsvLines)

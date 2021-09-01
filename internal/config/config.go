@@ -17,7 +17,7 @@ type Config struct {
 	Server        *httpserver.Server
 	serverAddress string
 	serverPort    int
-	scrape scraper.Scraper
+	scrape        scraper.Scraper
 }
 
 // New - returns an empty *Config

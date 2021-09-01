@@ -41,6 +41,7 @@ var singleElements []singleElem = []singleElem{
 	// <div>
 	{atom.Div, "itemprop", "recipeingredient", false, true},
 	{atom.Div, "class", "p-ingredient", false, true},
+	{atom.Div, "itemprop", "ingredient", false, true},
 	//{atom.Div, "class", "post-body entry-content", false, true},
 
 	// <label>

@@ -23,7 +23,7 @@ type Legacy struct {
 		} `json:"items"`
 	} `json:"data"`
 	StatusCode int
-	Error string
+	Error      string
 }
 
 type legacyClient struct {
@@ -37,7 +37,7 @@ func NewLegacy() *legacyClient {
 	return out
 }
 
-func (x *legacyClient)Get(sourceURL string) (out Legacy) {
+func (x *legacyClient) Get(sourceURL string) (out Legacy) {
 	type postURL struct {
 		URLStr string `json:"url"`
 	}

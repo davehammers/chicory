@@ -3,18 +3,19 @@ package scraper
 // contains definitions and functions for accessing and parsing recipes from URLs
 
 import (
+	"strings"
+
 	"golang.org/x/net/html"
 	"golang.org/x/net/html/atom"
-	"strings"
 )
 
 type nestedElem struct {
-	DataAtom  atom.Atom  // node type such as <span>
-	AttrKey   string     // matching attribute key
-	AttrValue string     // matching attribute value
+	DataAtom    atom.Atom // node type such as <span>
+	AttrKey     string    // matching attribute key
+	AttrValue   string    // matching attribute value
 	subDataAtom atom.Atom
-	breakOnBr bool
-	isEnd bool
+	breakOnBr   bool
+	isEnd       bool
 }
 
 // this table controls the behavior of a nested element ingredient

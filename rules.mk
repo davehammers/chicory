@@ -12,18 +12,18 @@ GOBIN := $(shell while true; do if [[ `pwd` == "/" ]]; then exit 1;fi;if [[ -f `
 export GOBIN
 
 # When using private repos, run this command:
-# git config -global url."ssh://git@github.com/mediamath".insteadOf "https://github.com/mediamath"
+# git config -global url."ssh://git@github.com/chicory".insteadOf "https://github.com/chicory"
 # or add the following lines to your ~/.gitconfig
-# [url "ssh://git@github.com/mediamath"]
-#   insteadOf = https://github.com/mediamath
+# [url "ssh://git@github.com/chicory"]
+#   insteadOf = https://github.com/chicory
 #
-export GOPRIVATE=github.com/MediaMath/*,github.com/mediamath/*
+export GOPRIVATE=github.com/chicory/*,github.com/chicory/*
 
 CODE_COVERAGE_PERCENT := $(if $(CODE_COVERAGE_PERCENT),$(CODE_COVERAGE_PERCENT),60.0)
 
 
 .PHONY: all $(SUBDIRS) build $(INSTALL_DIRS)
-all: build
+all: 
 ifneq ($(SUBDIRS),)
 	@echo "+++ Building"  $(notdir $(CURDIR))
 	go fmt ./...
@@ -39,6 +39,7 @@ ifneq ($(GO_FILES),)
 	go install
 endif
 $(INSTALL_DIRS) $(BUILD_DIRS):
+	@echo "Building $(@D)"
 	@$(MAKE) -C $(@D) $(@F)
 
 #
@@ -46,6 +47,7 @@ $(INSTALL_DIRS) $(BUILD_DIRS):
 #
 build: $(BUILD_DIRS)
 ifneq ($(GO_FILES),)
+	echo "$(GO_FILES)"
 	@echo "+++ Building $(notdir $(CURDIR))"
 	go fmt
 	go vet

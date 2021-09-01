@@ -172,6 +172,7 @@ func (x *jsonParserType) schemaOrg_RecipeJSON(text string) (ok bool) {
 		x.scraper.appendLine(x.recipe, r.RecipeIngredient)
 
 		// the remaining fields are optional
+		x.recipe.Name = x.extractString(r.Name)
 		x.recipe.RecipeCategory = x.extractString(r.RecipeCategory)
 		x.recipe.RecipeCuisine = x.extractString(r.RecipeCuisine)
 		x.recipe.Image = x.extractString(r.Image)

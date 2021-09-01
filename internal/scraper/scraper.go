@@ -22,6 +22,7 @@ type RecipeObject struct {
 	Error            string   `json:"error"`
 	SourceURL        string   `json:"url"`
 	Scraper          string   `json:"scraper"`
+	Name             string   `json:"name"`
 	RecipeCategory   string   `json:"recipeCategory"`
 	RecipeCuisine    string   `json:"recipeCuisine"`
 	RecipeIngredient []string `json:"recipeIngredient"`
